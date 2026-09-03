@@ -1,412 +1,499 @@
-# TASK-009D — Pre-release correctness and security fixes
+# TASK-010 — Clean-machine end-to-end verification
 
 ## Goal
 
-Fix the known pre-release correctness and security issues identified by independent review before signing, notarization, and clean-machine end-to-end verification.
+Verify the complete macOS user workflow on a clean compatible system using the actual packaged application artifacts.
 
-This task is intentionally narrow.
+This task validates the product as a user would experience it.
 
-It must address:
+Signing and notarization are explicitly out of scope for this task.
 
-1. IMAP STARTTLS protocol correctness;
-2. migration lifecycle subscription race;
-3. explicit `imapsync` persistent-log policy.
-
-Do not add unrelated features.
+Unsigned Gatekeeper behavior must be documented honestly and treated as an expected distribution limitation, not as an application failure.
 
 ## Context
 
-The project now has proven native packaged runtimes for:
+The project now has:
 
-- macOS x86_64;
-- macOS arm64.
+- complete renderer migration workflow;
+- correct IMAP STARTTLS behavior;
+- real IMAP connection testing;
+- migration start / streaming / cancellation / result UX;
+- lifecycle race protection;
+- explicit `imapsync --nolog` policy;
+- controlled temp/work directory behavior;
+- proven self-contained x86_64 runtime;
+- proven self-contained arm64 runtime;
+- architecture-specific packaged applications;
+- native arm64 CI verification;
+- packaged runtime smoke tests;
+- no end-user Homebrew/system Perl dependency.
 
-Both architecture-specific packaged application flows are verified.
+Remaining known release limitation:
 
-Before proceeding to release-hardening tasks, an independent review identified several correctness/security risks that are not reliably caught by the current test suite.
+- application artifacts are unsigned and not notarized because no Apple Developer Program credentials are currently available.
 
-These must be resolved before TASK-010.
+## Definition of clean machine
 
----
+A clean-machine verification environment must not depend on the development repository or development runtime.
 
-## Part 1 — Correct IMAP STARTTLS flow
+The target system must not require:
 
-### Problem
+- Node.js;
+- pnpm;
+- Homebrew;
+- MacPorts;
+- Perl installation;
+- `imapsync` installation;
+- repository source files;
+- developer build output outside the packaged application.
 
-Review the current STARTTLS connection-test implementation.
+Testing on a normal user account is preferred.
 
-The existing flow may incorrectly expect a second IMAP server greeting after the TLS upgrade.
+Do not configure the machine to imitate the developer workstation.
 
-A standards-compliant STARTTLS flow must not rely on receiving a new greeting after TLS negotiation.
+## Architectures
 
-### Research requirement
+Verify at least every architecture currently claimed as supported.
 
-Verify the expected IMAP STARTTLS behavior against the relevant RFC(s), including RFC 2595 and any applicable current IMAP requirements.
+### x86_64
 
-Document the protocol sequence actually implemented.
+Test the Intel artifact on a compatible Intel macOS system.
 
-Do not rely on existing test fixtures as proof of protocol correctness.
+### arm64
 
-### Required behavior
+Test the Apple Silicon artifact on a compatible native Apple Silicon macOS system.
 
-For STARTTLS mode, the connection test must follow a standards-compliant sequence conceptually equivalent to:
+Do not use Rosetta as proof of arm64 support.
 
-1. open plaintext TCP connection;
-2. receive initial IMAP greeting;
-3. issue `STARTTLS`;
-4. receive successful tagged response;
-5. upgrade the existing socket to TLS;
-6. continue the IMAP session without waiting for a second server greeting;
-7. issue `CAPABILITY` after the TLS upgrade where required/recommended by the protocol;
-8. authenticate using `LOGIN`.
+If clean physical hardware is unavailable for one architecture, use the strongest realistic native environment available and document the limitation precisely.
 
-Do not send credentials before TLS negotiation completes.
+Do not claim a clean-machine test occurred when only CI packaging/runtime smoke tests were performed.
 
-### CAPABILITY
+## Test artifact
 
-If the implementation uses CAPABILITY:
-
-- parse only what is necessary;
-- do not build a general IMAP parser;
-- do not add provider-specific behavior.
-
-If the server does not support STARTTLS when STARTTLS mode is requested, return a stable protocol/TLS-related failure.
-
-### Error handling
-
-Preserve the existing stable application-level error model.
-
-STARTTLS failures must not expose:
-
-- passwords;
-- raw socket objects;
-- stack traces;
-- raw protocol buffers.
-
-### Tests
-
-Update/add tests covering at minimum:
-
-- initial greeting received once;
-- STARTTLS tagged success;
-- TLS upgrade;
-- no second greeting expected after TLS upgrade;
-- post-upgrade CAPABILITY flow;
-- LOGIN occurs only after TLS is active;
-- STARTTLS rejection;
-- malformed STARTTLS response;
-- TLS upgrade failure;
-- timeout during STARTTLS;
-- credential-safe errors.
-
-The old incorrect second-greeting fixture must be removed or corrected.
-
----
-
-## Part 2 — Eliminate migration lifecycle subscription race
-
-### Problem
-
-Review the renderer migration-start flow.
-
-A race may exist if output/lifecycle listeners are registered only after `startMigration()` resolves and the renderer transitions into the running state.
-
-A fast child process may terminate before the lifecycle subscription is active, leaving the renderer stuck in a running state.
-
-### Required guarantee
-
-The renderer must not be able to miss the authoritative terminal lifecycle event for a migration it started.
-
-Fix this architecturally.
-
-### Acceptable strategies
-
-Prefer the smallest robust solution.
-
-Examples include:
-
-- register output/lifecycle listeners before invoking `startMigration()`;
-- or introduce migration identifiers plus retained/replayable authoritative main-process state;
-- or another narrowly scoped approach that guarantees no terminal-event loss.
-
-Do not add a global event bus or generic IPC subscription system.
-
-### Preferred simplicity
-
-If pre-subscribing before start is sufficient and reliable with the existing single-migration model, prefer it.
-
-Do not introduce migration IDs unless they are genuinely needed.
-
-### Listener lifecycle
-
-Ensure:
-
-- listeners are registered before the process can emit lifecycle completion;
-- no duplicate listeners accumulate;
-- failed `startMigration()` calls clean up listeners;
-- successful terminal completion cleans up listeners;
-- cancellation still works;
-- repeated migrations remain isolated.
-
-### Tests
-
-Add a deterministic regression test that simulates a migration which:
-
-1. starts;
-2. emits terminal lifecycle immediately;
-3. completes before React would otherwise render the running view.
-
-The renderer must still reach the correct terminal result.
-
-Also test:
-
-- immediate start failure cleanup;
-- listener cleanup after terminal result;
-- no stale listeners on second migration;
-- output events remain ordered;
-- cancellation behavior remains intact.
-
----
-
-## Part 3 — Explicit imapsync log policy
-
-### Problem
-
-`imapsync` can create persistent runtime files such as:
-
-- `LOG_imapsync/`;
-- `W/`;
-- temporary/cache/test files.
-
-These directories have already appeared in the development workspace.
-
-Ignoring them in Git is not sufficient.
-
-The production application must define an explicit logging policy.
-
-### Goal
-
-Prevent unintended persistent `imapsync` logs containing mailbox/server/runtime information from being written to uncontrolled locations.
-
-### Research requirement
-
-Review current `imapsync` options for controlling:
-
-- log creation;
-- log directories;
-- temporary/cache/work directories.
-
-Use upstream documentation.
-
-### Production policy
-
-Choose and document one explicit v1 policy.
-
-Preferred policy:
-
-- disable persistent `imapsync` logging where supported;
-- stream only sanitized stdout/stderr through the existing renderer path.
-
-If `imapsync` requires temporary/work directories:
-
-- create/use a controlled application temporary location;
-- do not use the repository working directory;
-- do not use arbitrary current working directory;
-- clean up when safe and appropriate.
-
-Do not persist migration logs by default.
-
-### Process working directory
-
-Set an explicit controlled `cwd` for the spawned production process if needed.
-
-Do not inherit an arbitrary application launch directory.
-
-The chosen directory must not contain credentials in its name/path.
-
-### Runtime arguments
-
-Add only explicitly supported log-control arguments.
-
-Do not expose log flags to renderer/user input.
-
-Keep the existing argument allowlist model.
-
-### Security
-
-Ensure:
-
-- passwords remain out of argv;
-- persistent logs are disabled or controlled;
-- app-generated logs do not contain credentials;
-- runtime output reaching renderer remains sanitized;
-- temp/work paths are not exposed in normal UI errors.
-
-### Cleanup
-
-If controlled temporary directories are created:
-
-- clean them up after migration where safe;
-- tolerate cleanup failure without crashing;
-- do not delete unrelated directories;
-- do not follow arbitrary renderer-provided paths.
-
-### Tests
-
-Add tests covering at minimum:
-
-- production invocation includes the chosen explicit log policy;
-- no uncontrolled `LOG_imapsync` path is used;
-- no uncontrolled `W` path is used;
-- process `cwd` is deterministic if introduced;
-- renderer cannot influence log/temp paths;
-- credentials remain absent from argv;
-- cleanup targets only app-owned paths;
-- failure messages do not expose internal temp paths.
-
----
-
-## Regression protection
-
-All previously proven guarantees must remain intact.
-
-Preserve:
-
-- shell-free `spawn()`;
-- narrow preload IPC;
-- credential handling through ADR-007;
-- x86_64 packaged runtime behavior;
-- arm64 packaged runtime behavior;
-- packaged runtime isolation;
-- deterministic architecture resolution;
-- connection-test failure mapping;
-- migration output sanitization;
-- bounded renderer output;
-- cancellation behavior.
-
-Do not regress either architecture-specific packaging strategy.
-
----
-
-## Native/package verification
-
-This task should not require rebuilding both architecture runtimes unless implementation touches runtime packaging.
-
-However, if invocation arguments, cwd, environment, or runtime adapter behavior changes, run the strongest relevant packaged smoke verification available.
-
-At minimum:
-
-- `pnpm verify`;
-- x86_64 packaged/runtime smoke verification locally where practical;
-- arm64 deterministic tests locally.
-
-If the change materially affects packaged runtime invocation, also push and run the existing native arm64 CI workflow.
-
-Do not claim arm64 packaged verification for changed runtime behavior unless CI actually reruns successfully.
-
----
-
-## Documentation
-
-Update:
-
-- `docs/architecture.md`;
-- `docs/security.md`;
-- `docs/testing.md`;
-- `docs/decisions.md` if a meaningful architectural decision is introduced;
-- `docs/progress.md`;
-- `docs/runtime.md` if runtime cwd/log behavior changes;
-- README only if developer/release behavior changes.
-
-Document explicitly:
-
-- correct STARTTLS sequence;
-- lifecycle-listener race resolution;
-- final `imapsync` log/temp policy.
-
----
-
-## Scope restrictions
+Use the actual produced distribution artifact.
 
 Do not:
 
-- add OAuth;
-- add provider-specific IMAP handling;
-- create a full IMAP protocol library;
-- add migration history;
-- add user-facing log export;
-- persist logs;
-- add global state management;
-- redesign the renderer;
-- change architecture-specific runtime strategy;
-- implement signing/notarization;
-- start TASK-010;
-- add unrelated refactors.
+- run `pnpm dev`;
+- launch the unpackaged app;
+- substitute staging runtime files;
+- modify the `.app` contents after packaging;
+- install runtime dependencies manually.
 
----
+Record:
 
-## Verification
+- application version;
+- artifact filename;
+- architecture;
+- commit/release identifier;
+- artifact SHA-256 where practical.
+
+## Download / transfer simulation
+
+Test the artifact through a realistic user-distribution path where possible.
+
+For example:
+
+- download from GitHub Actions artifact/release;
+- transfer the `.zip` / selected distribution archive to the clean machine;
+- extract normally.
+
+Avoid testing only the exact local build directory copy if that bypasses quarantine/Gatekeeper behavior.
+
+## Gatekeeper / unsigned behavior
+
+The application is currently unsigned and not notarized.
+
+Document exactly what macOS does on first launch.
+
+Expected possibilities include:
+
+- normal launch blocked;
+- warning about unidentified/unverified developer;
+- requirement to use macOS Privacy & Security / Open Anyway;
+- context-menu Open behavior depending on macOS version.
+
+Do not:
+
+- disable Gatekeeper globally;
+- run undocumented `xattr` removal as the normal user workflow;
+- tell users to disable macOS security;
+- describe the unsigned warning as a virus detection;
+- mark expected unsigned Gatekeeper behavior as an application defect.
+
+Document the minimum normal macOS user action required to launch the application.
+
+## Application startup
+
+After the user completes any expected unsigned-app approval flow:
+
+Verify:
+
+- application launches;
+- renderer loads correctly;
+- no terminal is required;
+- no missing runtime error appears;
+- no Homebrew/system Perl prompt appears;
+- no crash occurs.
+
+## Runtime isolation verification
+
+On the clean machine, confirm the app performs runtime preflight successfully.
+
+The user must not need to know where `imapsync` or Perl lives.
+
+Where practical verify that:
+
+- `imapsync` is not installed globally;
+- Homebrew is absent or irrelevant;
+- system Perl is not used by the application.
+
+Do not modify the clean system merely to satisfy the test.
+
+## Real IMAP connection test
+
+Use controlled test mailboxes.
+
+Do not use production/customer credentials for verification unless explicitly authorized.
+
+Create or use test accounts containing non-sensitive mail.
+
+Verify source connection testing for:
+
+- host;
+- port;
+- selected security mode;
+- authentication.
+
+Verify destination connection testing likewise.
+
+At minimum perform a real TLS-based scenario.
+
+If STARTTLS is relevant to supported deployments, perform one real STARTTLS server verification as well.
+
+Do not rely only on mocks for this task.
+
+## Failed authentication test
+
+Enter an intentionally incorrect password for a test account.
+
+Verify:
+
+- authentication test fails clearly;
+- no password is shown in the UI;
+- no raw stack trace appears;
+- the application remains usable afterward.
+
+Then correct the password and verify recovery.
+
+## Real migration test
+
+Perform an actual small mailbox migration between controlled test accounts.
+
+Prepare a source mailbox with a deterministic small dataset.
+
+For example, include:
+
+- several normal messages;
+- nested folders if supported by the current migration behavior;
+- messages with attachments;
+- Unicode subject/sender/folder data where practical.
+
+Do not use a huge mailbox for the initial E2E proof.
+
+Record the expected test dataset.
+
+## Migration workflow
+
+Verify the complete user path:
+
+1. enter source endpoint;
+2. enter destination endpoint;
+3. test source connection;
+4. test destination connection;
+5. start migration;
+6. observe streamed output;
+7. reach terminal success state;
+8. return to the form.
+
+Confirm that no terminal or external tool is required.
+
+## Migration correctness
+
+After migration, inspect the destination mailbox using an independent mail client/webmail where practical.
+
+Verify at minimum:
+
+- expected folders exist;
+- expected messages arrived;
+- attachments are present;
+- message subjects/content are intact;
+- Unicode test data survives;
+- no obvious unexpected duplication occurred.
+
+Do not claim full imapsync semantic correctness from a tiny test dataset.
+
+This task proves the supported user workflow, not every possible IMAP edge case.
+
+## Repeat migration flow
+
+Use the application's "Start another migration" flow.
+
+Verify:
+
+- previous output is cleared;
+- previous success state is cleared;
+- endpoint values may remain;
+- connection tests are no longer trusted;
+- fresh connection tests are required;
+- second migration can start normally.
+
+## Cancellation E2E
+
+Perform a controlled migration long enough to exercise cancellation if practical.
+
+Verify:
+
+- cancel action is available;
+- UI enters cancelling state;
+- output remains visible;
+- process stops;
+- final state is cancellation, not failure.
+
+Do not claim rollback.
+
+Document what remains in the destination mailbox after cancellation if observable.
+
+## Failure E2E
+
+Trigger at least one safe real migration failure where practical.
+
+Examples:
+
+- unreachable test host;
+- deliberately invalid destination authentication before migration;
+- controlled runtime-unavailable fixture only if this can be done without altering the release artifact.
+
+Verify:
+
+- safe user-facing message;
+- no stack trace;
+- no internal path leakage;
+- app can recover to another migration attempt.
+
+Do not corrupt the actual release runtime solely to manufacture a failure unless testing from a disposable copy.
+
+## Persistent-file inspection
+
+After connection tests and migrations, inspect normal user-accessible locations for unexpected application/runtime residue.
+
+Specifically verify that the app does not leave uncontrolled:
+
+- `LOG_imapsync/`;
+- `W/`;
+- repository-style temp folders;
+- plaintext credential files.
+
+Controlled OS temporary files may exist transiently.
+
+Document any persistent application files that are intentionally created.
+
+## Credential hygiene
+
+During E2E verification, inspect:
+
+- application UI;
+- diagnostic output;
+- streamed migration output;
+- normal logs;
+- obvious process invocation where practical.
+
+Verify passwords do not appear.
+
+Do not include real passwords in screenshots, CI logs, task documentation, or bug reports.
+
+## Network/security behavior
+
+Verify TLS certificate validation remains enabled.
+
+Do not bypass certificate verification merely to make a test server work.
+
+If using a test server with invalid/self-signed certificates, treat rejection as correct behavior unless product requirements explicitly support custom trust.
+
+## Offline/runtime behavior
+
+After the application has been downloaded/extracted, no network access should be required merely to load the bundled runtime.
+
+The actual migration naturally requires network connectivity to the IMAP servers.
+
+Do not confuse runtime self-containment with offline email migration.
+
+## User-facing usability notes
+
+Record obvious user-facing issues encountered during the test.
+
+Only fix small release-blocking defects discovered during E2E.
+
+Do not expand this task into a redesign.
+
+If a larger UX issue is found:
+
+- record it in backlog;
+- keep TASK-010 focused.
+
+## Architecture-specific differences
+
+Record any behavior difference between x86_64 and arm64.
+
+Expected application behavior should be equivalent.
+
+Architecture-specific packaging/runtime internals must not leak into normal user UX.
+
+## Evidence
+
+Create a concise test report.
+
+Suggested location:
+
+`docs/e2e-macos.md`
+
+Record for each tested architecture:
+
+- hardware/model category;
+- CPU architecture;
+- macOS version;
+- artifact version/name;
+- artifact SHA-256 if available;
+- Gatekeeper first-launch behavior;
+- runtime preflight;
+- source connection test result;
+- destination connection test result;
+- real migration result;
+- cancellation result if tested;
+- repeat migration result;
+- residue/log inspection;
+- known limitations.
+
+Do not record credentials.
+
+## Screenshots
+
+Screenshots are optional.
+
+If used:
+
+- redact addresses/credentials when sensitive;
+- do not capture passwords;
+- keep them out of Git if they are large or contain private test data unless explicitly useful.
+
+## Signing/notarization status
+
+State clearly in the E2E report:
+
+- artifact is unsigned;
+- artifact is not notarized;
+- Gatekeeper approval is therefore expected;
+- signing/notarization is optional future/client-funded release hardening.
+
+Do not mark TASK-010 blocked solely because notarization is absent.
+
+## Automated verification
 
 Run:
 
 `pnpm verify`
 
-It must remain green.
+before producing the test artifact.
 
-If packaged runtime invocation changed, run relevant packaged smoke verification.
+Existing CI/runtime tests must remain green.
 
-If arm64 runtime behavior is affected, push and confirm the native arm64 GitHub Actions workflow passes again.
+TASK-010 itself requires manual/native E2E evidence in addition to automated verification.
 
----
+## Regression handling
+
+If E2E finds a real release-blocking application defect:
+
+1. reproduce it;
+2. add a deterministic automated regression test where appropriate;
+3. fix it narrowly;
+4. run `pnpm verify`;
+5. rebuild the affected artifact;
+6. repeat the relevant E2E step.
+
+Do not merely document a reproducible correctness/security bug as a known limitation when it can reasonably be fixed.
+
+## Scope restrictions
+
+Do not:
+
+- enroll in Apple Developer Program;
+- implement signing/notarization;
+- disable Gatekeeper globally;
+- require users to install Homebrew;
+- add migration history;
+- add provider-specific features;
+- implement OAuth;
+- redesign the UI;
+- add auto-update;
+- add Windows/Linux support;
+- use customer production mailboxes without authorization.
 
 ## Acceptance criteria
 
-TASK-009D is complete only when:
+TASK-010 is complete when:
 
-- STARTTLS connection testing follows the correct protocol sequence;
-- no second greeting is expected after TLS upgrade;
-- post-upgrade CAPABILITY/authentication behavior is correct;
-- STARTTLS regression tests exist;
-- migration lifecycle terminal events cannot be lost due to subscription timing;
-- a deterministic regression test proves immediate completion is handled;
-- listener cleanup remains correct;
-- `imapsync` persistent logging behavior is explicit;
-- uncontrolled `LOG_imapsync/` and `W/` output is prevented in production;
-- process cwd/temp behavior is controlled where necessary;
-- credentials remain protected;
-- x86_64 and arm64 runtime assumptions remain valid;
-- relevant packaged smoke tests pass if invocation behavior changed;
-- documentation is updated;
-- `pnpm verify` succeeds.
+- `pnpm verify` passes;
+- actual packaged artifact is used;
+- at least one clean/native environment completes the full user workflow;
+- every architecture claimed as clean-machine verified has real native evidence;
+- first-launch Gatekeeper behavior is documented honestly;
+- application launches after normal unsigned-app approval;
+- bundled runtime works without end-user Homebrew/system Perl setup;
+- real source/destination IMAP authentication succeeds with controlled test accounts;
+- at least one real mailbox migration succeeds;
+- destination mailbox is independently inspected;
+- repeat-migration flow works;
+- credentials do not appear in UI/output/logs;
+- uncontrolled `LOG_imapsync/` / `W/` residue is absent;
+- failures remain safe and recoverable;
+- signing/notarization limitation is documented;
+- `docs/e2e-macos.md` records the evidence and remaining limitations.
+
+If an architecture has not undergone a real clean/native E2E run, do not describe that architecture as clean-machine verified.
 
 ## Task lifecycle
 
 On completion:
 
 1. mark `tasks/current.md` as `Complete`;
-2. archive the task as `tasks/done/TASK-009D.md`;
+2. archive the task as `tasks/done/TASK-010.md`;
 3. append the result to `docs/progress.md`;
-4. update the backlog only with concrete remaining blockers;
-5. do not automatically start signing/notarization or TASK-010.
+4. update backlog with concrete remaining release/UX work;
+5. leave signing/notarization as optional/client-funded unless requirements change.
 
 ## Status
 
-Complete.
+Blocked — requires manual clean-machine testing with real test mailboxes.
 
-All three parts are resolved and verified:
+Done (automated/package verification):
 
-1. **STARTTLS correctness** — the connection test now follows the
-   standards-compliant sequence (greeting → STARTTLS → TLS upgrade with no
-   second greeting → CAPABILITY → LOGIN), with regression tests for rejection,
-   malformed response, upgrade failure, timeout, and credential-safe errors.
-2. **Lifecycle subscription race** — output/lifecycle listeners are registered
-   before `startMigration()`, the terminal handler accepts `starting`/`running`/
-   `cancelling`, and a deterministic regression test proves an
-   immediately-terminating migration still reaches the correct terminal result.
-   Listeners are cleaned up on terminal completion, start failure, and unmount.
-3. **imapsync log policy** — production invocation adds `--nolog`, `--tmpdir
-   <cwd>`, and a controlled `cwd` (OS temporary directory), preventing
-   `LOG_imapsync/` and `W/` from being written into the app/working directory;
-   log/temp paths are never derived from renderer input.
+- `pnpm verify` passes (183 tests).
+- The actual distribution artifacts were produced and recorded with SHA-256
+  (see `docs/e2e-macos.md`):
+  - x86_64 `imapSyncGUI-0.1.0-mac-x64.zip` (rebuilt with the latest code);
+  - arm64 `imapSyncGUI-0.1.0-mac-arm64.zip` (downloaded from native CI).
+- Packaged runtime smoke tests pass for x86_64 (local) and arm64 (native CI);
+  the native arm64 workflow passes end to end.
+- `docs/e2e-macos.md` documents the artifact details, signing/notarization
+  limitation, and the remaining manual steps.
 
-`pnpm verify` passes (183 tests).
+Remaining blocker (cannot be performed by the agent environment):
+
+- a clean macOS machine without developer tooling;
+- controlled test IMAP mailboxes (credentials);
+- an interactive manual session for the real connection-test/migration workflow.
+
+Per the task, this cannot be marked Complete without real clean/native E2E
+evidence, and no architecture is described as "clean-machine verified". The
+task remains blocked; `docs/e2e-macos.md` records the exact remaining steps.

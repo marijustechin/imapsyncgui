@@ -298,3 +298,25 @@ Implemented:
 Verification:
 
 - pnpm verify: PASS (183 tests)
+
+## 2026-09-03 — TASK-010
+
+Status: Blocked (manual clean-machine E2E requires clean hardware + test mailboxes)
+
+Implemented:
+
+- produced and recorded the actual distribution artifacts (x86_64 rebuilt, arm64
+  from native CI) with SHA-256
+- documented signing/notarization status and Gatekeeper expectation
+- created `docs/e2e-macos.md` with the honest verification record and the
+  remaining manual E2E steps
+
+Verification:
+
+- pnpm verify: PASS (183 tests)
+- x86_64 packaged smoke test PASS (local); arm64 native CI PASS
+
+Blocker: the real clean-machine workflow (download/extract, Gatekeeper, launch,
+real IMAP connection tests, real mailbox migration, cancellation, repeat,
+residue inspection) requires clean macOS hardware, controlled test mailboxes,
+and an interactive session, none available in the agent environment.
