@@ -19,7 +19,6 @@ const projectDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const runtimeRoot = join(projectDir, 'runtime')
 const licensesDir = join(dirname(fileURLToPath(import.meta.url)), 'licenses')
 
-const IMAPSYNC_VERSION = '2.314'
 const IMAPSYNC_SCRIPT_URL = 'https://imapsync.lamiral.info/imapsync'
 const CPANM_URL = 'https://cpanmin.us'
 
@@ -111,7 +110,11 @@ function main() {
   const scriptPath = join(runtimeDir, 'imapsync')
   writeFileSync(scriptPath, scriptBuffer)
   chmodSync(scriptPath, 0o755)
-  console.log(`  imapsync script sha256: ${sha256Hex(Buffer.from(scriptBuffer))}`)
+  const scriptSha256 = sha256Hex(Buffer.from(scriptBuffer))
+  const versionMatch = scriptBuffer.toString('utf8').match(/\$Id: imapsync,v\s+(\d+\.\d+)/)
+  const imapsyncVersion = versionMatch ? versionMatch[1] : 'unknown'
+  console.log(`  imapsync version: ${imapsyncVersion}`)
+  console.log(`  imapsync script sha256: ${scriptSha256}`)
 
   let pp = join(brewPrefix, 'bin', 'pp')
   if (!existsSync(pp)) {
@@ -132,12 +135,13 @@ function main() {
   const manifest = {
     formatVersion: 1,
     architecture: 'darwin-arm64',
-    imapsyncVersion: IMAPSYNC_VERSION,
+    imapsyncVersion,
+    imapsyncScriptSha256: scriptSha256,
     perlVersion: `${perlVersion} (embedded via PAR::Packer)`,
     opensslVersion: 'embedded',
     builtAt: new Date().toISOString(),
     components: [
-      { name: 'imapsync', version: IMAPSYNC_VERSION, license: 'NLPL', source: IMAPSYNC_SCRIPT_URL },
+      { name: 'imapsync', version: imapsyncVersion, license: 'NLPL', source: IMAPSYNC_SCRIPT_URL },
       { name: 'perl', version: `${perlVersion} (embedded)`, license: 'Artistic-1.0 or GPL-1.0-or-later', source: 'https://www.perl.org/' },
       { name: 'openssl', version: 'embedded', license: 'OpenSSL + Apache-SSLeay', source: 'https://www.openssl.org/' },
       { name: 'perl modules (CPAN)', version: 'embedded', license: 'Artistic-1.0 or GPL-1.0-or-later', source: 'https://metacpan.org/' },
