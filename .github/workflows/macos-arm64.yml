@@ -1,0 +1,99 @@
+name: macOS arm64 (native) verification
+
+on:
+  workflow_dispatch:
+
+jobs:
+  arm64:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: apps/desktop
+
+    steps:
+      - name: Verify native arm64 host
+        run: |
+          echo "uname -m: $(uname -m)"
+          if [ "$(uname -m)" != "arm64" ]; then
+            echo "ERROR: runner is not arm64; aborting."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Record environment
+        run: |
+          echo "macOS: $(sw_vers -productVersion)"
+          echo "uname -m: $(uname -m)"
+          echo "node: $(node --version)"
+          echo "process.arch: $(node -p 'process.arch')"
+          echo "pnpm: $(pnpm --version)"
+          if [ "$(node -p 'process.arch')" != "arm64" ]; then
+            echo "ERROR: Node.js is not running as arm64; aborting."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Baseline verification
+        run: pnpm --filter @imapsyncgui/desktop run verify
+
+      - name: Build arm64 runtime
+        run: pnpm run runtime:build:arm64
+
+      - name: Validate arm64 runtime
+        run: pnpm run runtime:validate -- --arch arm64
+
+      - name: Self-test arm64 runtime (host isolation)
+        run: pnpm run runtime:self-test -- --arch arm64
+
+      - name: Build arm64 application
+        run: pnpm run package:mac:arm64
+
+      - name: Inspect architectures
+        run: |
+          APP=$(find release -maxdepth 2 -name 'imapSyncGUI.app' -type d | head -1)
+          echo "app: $APP"
+          file "$APP/Contents/MacOS/imapSyncGUI"
+          file "$APP/Contents/Resources/runtime/darwin-arm64/bin/imapsync"
+          echo "--- dynamic libraries ---"
+          otool -L "$APP/Contents/Resources/runtime/darwin-arm64/bin/imapsync"
+          echo "--- manifest ---"
+          cat "$APP/Contents/Resources/runtime/darwin-arm64/manifest.json"
+
+      - name: Packaged runtime smoke test
+        run: pnpm run package:smoke -- --arch arm64
+
+      - name: Launch application (best effort)
+        continue-on-error: true
+        run: |
+          APP=$(find release -maxdepth 2 -name 'imapSyncGUI.app' -type d | head -1)
+          "$APP/Contents/MacOS/imapSyncGUI" >/tmp/app-launch.log 2>&1 &
+          APP_PID=$!
+          sleep 8
+          if kill -0 "$APP_PID" 2>/dev/null; then
+            echo "application process started (pid $APP_PID)"
+            kill "$APP_PID" || true
+          else
+            echo "application process did not stay running; log follows"
+            cat /tmp/app-launch.log
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: imapSyncGUI-mac-arm64
+          path: |
+            apps/desktop/release/*-mac-arm64.zip
+            apps/desktop/release/**/imapSyncGUI.app/Contents/Resources/runtime/darwin-arm64/manifest.json
+          if-no-files-found: error

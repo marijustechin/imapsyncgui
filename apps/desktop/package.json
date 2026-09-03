@@ -1,0 +1,45 @@
+{
+  "name": "@imapsyncgui/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Desktop application for migrating email between IMAP servers.",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json --composite false && tsc --noEmit -p tsconfig.web.json --composite false",
+    "test": "vitest run",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "runtime:build": "node scripts/build-runtime.mjs",
+    "runtime:build:arm64": "node scripts/build-runtime-arm64.mjs",
+    "runtime:validate": "node scripts/validate-runtime.mjs",
+    "runtime:self-test": "node scripts/self-test-runtime.mjs",
+    "package:mac:x64": "TARGET_ARCH=x64 electron-builder --mac --x64 --config electron-builder.config.cjs",
+    "package:mac:arm64": "TARGET_ARCH=arm64 electron-builder --mac --arm64 --config electron-builder.config.cjs",
+    "package:smoke": "node scripts/package-smoke.mjs"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^26.4.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^44.1.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "eslint": "^10.9.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "jsdom": "^30.0.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.69.0",
+    "vite": "^7.3.6",
+    "vitest": "^4.1.11"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "imapsyncgui",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.24.0",
+  "scripts": {
+    "dev": "pnpm --filter @imapsyncgui/desktop dev",
+    "build": "pnpm --filter @imapsyncgui/desktop build",
+    "lint": "pnpm --filter @imapsyncgui/desktop lint",
+    "typecheck": "pnpm --filter @imapsyncgui/desktop typecheck",
+    "test": "pnpm --filter @imapsyncgui/desktop test",
+    "verify": "pnpm --filter @imapsyncgui/desktop verify"
+  }
+}
