@@ -6,6 +6,7 @@ export function createNodeProcessLauncher(): ProcessLauncher {
     const child = spawn(spec.executable, spec.args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: spec.env,
+      cwd: spec.cwd,
     })
 
     const stdout = child.stdout

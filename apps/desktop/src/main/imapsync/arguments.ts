@@ -24,5 +24,6 @@ export function buildMigrationArgs(input: MigrationInput): string[] {
     '--user2', destination.username,
     ...securityFlags(destination.security, 2),
     '--noreleasecheck',
+    '--nolog',
   ]
 }

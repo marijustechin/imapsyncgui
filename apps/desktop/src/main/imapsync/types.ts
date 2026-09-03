@@ -25,6 +25,7 @@ export interface LaunchSpec {
   executable: string
   args: string[]
   env?: NodeJS.ProcessEnv
+  cwd?: string
 }
 
 export type ProcessLauncher = (spec: LaunchSpec) => MigrationProcess

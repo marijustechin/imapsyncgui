@@ -79,7 +79,18 @@ executed; see ADR-014.
 - `src/main/imap/client.test.ts` covers the connection-test protocol flow
   (implicit TLS, plaintext, STARTTLS), timeout, DNS/connection/TLS/authentication
   failure mapping, cleanup, and credential-free results using an injected fake
-  socket layer.
+  socket layer. STARTTLS coverage asserts the standards-compliant sequence:
+  greeting → STARTTLS → TLS upgrade (no second greeting) → CAPABILITY → LOGIN,
+  plus rejection, malformed response, upgrade failure, and timeout during
+  STARTTLS.
+- `src/main/imapsync/arguments.test.ts` additionally asserts the explicit
+  `--nolog` policy and that log/temp flags are never derived from renderer
+  input; `src/main/imapsync/adapter.test.ts` asserts a controlled `cwd` and
+  `--tmpdir`.
+- `src/renderer/src/App.test.tsx` covers a lifecycle subscription race
+  regression: an immediately-terminating migration is still captured, listeners
+  are cleaned up on immediate start failure, and no listeners leak across
+  repeated migrations.
 - `src/main/handlers.test.ts` verifies invalid input is rejected before any
   network access.
 - `src/renderer/src/endpoint.test.ts` covers renderer validation, security-mode

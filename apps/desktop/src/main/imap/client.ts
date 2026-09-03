@@ -109,6 +109,9 @@ async function runTest(endpoint: ImapEndpoint, layer: SocketLayer, timeoutMs: nu
   connection.setTimeout(timeoutMs)
   connection.on('timeout', onTimeout)
 
+  let tagCounter = 1
+  const nextTag = (): string => `a${tagCounter++}`
+
   try {
     const greeting = await reader.nextLine()
     if (!isOkGreeting(greeting)) {
@@ -116,9 +119,10 @@ async function runTest(endpoint: ImapEndpoint, layer: SocketLayer, timeoutMs: nu
     }
 
     if (security === 'starttls') {
-      connection.write('a0 STARTTLS\r\n')
-      const status = await readTaggedStatus(reader, 'a0')
-      if (status !== 'OK') {
+      const starttlsTag = nextTag()
+      connection.write(`${starttlsTag} STARTTLS\r\n`)
+      const starttlsStatus = await readTaggedStatus(reader, starttlsTag)
+      if (starttlsStatus !== 'OK') {
         throw new ConnectionTestError('tls')
       }
 
@@ -127,14 +131,20 @@ async function runTest(endpoint: ImapEndpoint, layer: SocketLayer, timeoutMs: nu
       connection.setTimeout(timeoutMs)
       connection.on('timeout', onTimeout)
 
-      const tlsGreeting = await reader.nextLine()
-      if (!isOkGreeting(tlsGreeting)) {
+      // After the TLS upgrade the session continues without a second server
+      // greeting (RFC 2595 / RFC 3501). Re-read the capability list, which
+      // may differ once TLS is active.
+      const capabilityTag = nextTag()
+      connection.write(`${capabilityTag} CAPABILITY\r\n`)
+      const capabilityStatus = await readTaggedStatus(reader, capabilityTag)
+      if (capabilityStatus !== 'OK') {
         throw new ConnectionTestError('protocol')
       }
     }
 
-    connection.write(`a1 LOGIN ${quote(username)} ${quote(password)}\r\n`)
-    const status = await readTaggedStatus(reader, 'a1')
+    const loginTag = nextTag()
+    connection.write(`${loginTag} LOGIN ${quote(username)} ${quote(password)}\r\n`)
+    const status = await readTaggedStatus(reader, loginTag)
 
     if (status === 'OK') {
       return

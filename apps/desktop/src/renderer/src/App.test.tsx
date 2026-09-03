@@ -532,3 +532,51 @@ describe('App migration result', () => {
     expect(startMigrationMock).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('App lifecycle subscription race', () => {
+  it('reaches the terminal state when lifecycle fires immediately after start', async () => {
+    render(<App />)
+    await fillAndTestBoth()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start migration' }))
+
+    // The lifecycle listener is registered before startMigration resolves, so
+    // an immediately-terminating process must still be caught.
+    emitLifecycle({ phase: 'succeeded' })
+
+    await screen.findByText('Migration completed successfully.')
+    expect(screen.getByRole('button', { name: 'Start another migration' })).toBeDefined()
+  })
+
+  it('cleans up listeners when startMigration fails immediately', async () => {
+    startMigrationMock.mockResolvedValue({ ok: false, message: 'runtime unavailable' })
+    render(<App />)
+    await fillAndTestBoth()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start migration' }))
+
+    await screen.findByText('runtime unavailable')
+
+    expect(lifecycleListeners).toHaveLength(0)
+    expect(outputListeners).toHaveLength(0)
+  })
+
+  it('does not leak listeners across two migrations', async () => {
+    render(<App />)
+    await beginMigration()
+    emitLifecycle({ phase: 'succeeded' })
+    await screen.findByText('Migration completed successfully.')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start another migration' }))
+
+    expect(lifecycleListeners).toHaveLength(0)
+    expect(outputListeners).toHaveLength(0)
+
+    await fillAndTestBoth()
+    fireEvent.click(screen.getByRole('button', { name: 'Start migration' }))
+    await screen.findByText('Migration running')
+
+    expect(lifecycleListeners).toHaveLength(1)
+    expect(outputListeners).toHaveLength(1)
+  })
+})

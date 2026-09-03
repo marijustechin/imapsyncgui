@@ -37,6 +37,7 @@ describe('buildMigrationArgs', () => {
       '--user2', 'dest-user',
       '--tls2',
       '--noreleasecheck',
+      '--nolog',
     ])
   })
 
@@ -61,7 +62,23 @@ describe('buildMigrationArgs', () => {
 
   it('passes only supported imapsync options', () => {
     const flags = buildMigrationArgs(input()).filter((arg) => arg.startsWith('--'))
-    expect(flags).toEqual(['--host1', '--port1', '--user1', '--ssl1', '--host2', '--port2', '--user2', '--tls2', '--noreleasecheck'])
+    expect(flags).toEqual(['--host1', '--port1', '--user1', '--ssl1', '--host2', '--port2', '--user2', '--tls2', '--noreleasecheck', '--nolog'])
+  })
+
+  it('always disables persistent imapsync logging', () => {
+    expect(buildMigrationArgs(input())).toContain('--nolog')
+    expect(buildMigrationArgs(input())).not.toContain('--log')
+    expect(buildMigrationArgs(input())).not.toContain('--logfile')
+    expect(buildMigrationArgs(input())).not.toContain('--logdir')
+  })
+
+  it('does not introduce log or temp path flags from renderer input', () => {
+    const args = buildMigrationArgs(input({ source: { host: '/tmp/evil' }, destination: { username: 'LOG_imapsync' } }))
+    expect(args).not.toContain('--tmpdir')
+    expect(args).not.toContain('--logfile')
+    expect(args).not.toContain('--logdir')
+    expect(args).not.toContain('--log')
+    expect(args).toContain('--nolog')
   })
 
   it('keeps a malicious host value as a value, not as a flag', () => {

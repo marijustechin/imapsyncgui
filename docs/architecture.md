@@ -76,6 +76,15 @@ an `onOutput` callback that broadcasts sanitized lines to the renderer over the
 `migration:output` channel. The launcher is injected so the adapter can be
 tested without a real `imapsync` installation.
 
+### Runtime invocation policy
+
+Migration invocation appends the allowlisted control flags `--nolog` (disable
+`imapsync` persistent file logs) and `--tmpdir <cwd>`, and spawns the process
+with a controlled `cwd` equal to the OS temporary directory. This prevents
+`LOG_imapsync/`, `W/`, and temporary files from being written into the
+application or working directory. Log/temp paths are never derived from
+renderer input.
+
 ## Runtime packaging
 
 The bundled `imapsync` runtime lives under `apps/desktop/runtime/<arch>` in
@@ -178,6 +187,21 @@ any network access; the client returns a typed `ConnectionTestResult` with a
 stable failure code (`dns`, `connection`, `timeout`, `tls`, `authentication`,
 `protocol`, `internal`).
 
+### STARTTLS sequence
+
+For `starttls` mode the client follows the standards-compliant sequence:
+
+1. open a plaintext TCP connection;
+2. read the initial server greeting;
+3. issue `STARTTLS`;
+4. read the tagged success response;
+5. upgrade the existing socket to TLS;
+6. continue the session **without waiting for a second greeting**;
+7. issue `CAPABILITY` to re-read the post-TLS capability list;
+8. authenticate with `LOGIN`.
+
+Credentials are sent only after the TLS upgrade completes.
+
 ## Renderer
 
 The renderer is a single-screen React app (`apps/desktop/src/renderer/src/`):
@@ -206,8 +230,11 @@ view. Migration state is
 where the terminal transition is driven by the narrow `migration:lifecycle`
 event emitted from the main process — never by parsing output text. Output
 arrives through the `migration:output` channel and is appended incrementally.
-The output and lifecycle subscriptions are registered once per active migration
-and removed when the migration terminates or the view unmounts.
+
+Output/lifecycle listeners are registered **before** `startMigration()` is
+invoked, so an immediately-terminating process cannot be missed; listeners are
+removed on terminal completion, on start failure, and on unmount, and repeated
+migrations remain isolated.
 
 ### Migration result contract
 

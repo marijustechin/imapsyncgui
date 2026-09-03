@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { EndpointForm, type TestState } from './EndpointForm'
 import { MigrationView, type MigrationViewPhase } from './MigrationView'
 import {
@@ -54,6 +54,9 @@ function App() {
   const [identities, setIdentities] = useState<Identities | null>(null)
   const [cancelError, setCancelError] = useState<string | null>(null)
 
+  const unsubscribeRef = useRef<(() => void) | null>(null)
+  const terminalRef = useRef(false)
+
   const sourceErrors = validateEndpointValues(source.values)
   const destinationErrors = validateEndpointValues(destination.values)
 
@@ -61,20 +64,23 @@ function App() {
   const bothTested = source.test.phase === 'success' && destination.test.phase === 'success'
   const canStart = bothValid && bothTested && (migration.phase === 'idle' || migration.phase === 'startFailed')
 
-  const active = migration.phase === 'running' || migration.phase === 'cancelling'
+  function cleanupSubscription(): void {
+    unsubscribeRef.current?.()
+    unsubscribeRef.current = null
+  }
 
-  useEffect(() => {
-    if (!active) {
-      return
-    }
+  function subscribeMigration(): void {
+    cleanupSubscription()
+    terminalRef.current = false
 
     const unsubscribeOutput = window.api.onMigrationOutput((event) => {
       setOutput((prev) => appendOutput(prev, event.text))
     })
 
     const unsubscribeLifecycle = window.api.onMigrationLifecycle((event) => {
+      terminalRef.current = true
       setMigration((prev) => {
-        if (prev.phase !== 'running' && prev.phase !== 'cancelling') {
+        if (prev.phase !== 'starting' && prev.phase !== 'running' && prev.phase !== 'cancelling') {
           return prev
         }
         if (event.phase === 'succeeded') {
@@ -85,13 +91,20 @@ function App() {
         }
         return { phase: 'failed', message: event.message }
       })
+      cleanupSubscription()
     })
 
-    return () => {
+    unsubscribeRef.current = () => {
       unsubscribeOutput()
       unsubscribeLifecycle()
     }
-  }, [active])
+  }
+
+  useEffect(() => {
+    return () => {
+      cleanupSubscription()
+    }
+  }, [])
 
   function updateSide(side: Side, patch: Partial<EndpointValues>): void {
     const setState = side === 'source' ? setSource : setDestination
@@ -142,19 +155,27 @@ function App() {
     }
 
     const input = { source: toEndpoint(source.values), destination: toEndpoint(destination.values) }
+
+    setIdentities({
+      source: `${input.source.username}@${input.source.host}`,
+      destination: `${input.destination.username}@${input.destination.host}`,
+    })
+    setOutput('')
+    setCancelError(null)
+
+    // Subscribe before starting so an immediately-terminating process cannot
+    // be missed.
+    subscribeMigration()
     setMigration({ phase: 'starting' })
 
     const result = await window.api.startMigration(input)
 
     if (result.ok) {
-      setIdentities({
-        source: `${input.source.username}@${input.source.host}`,
-        destination: `${input.destination.username}@${input.destination.host}`,
-      })
-      setOutput('')
-      setCancelError(null)
-      setMigration({ phase: 'running' })
+      if (!terminalRef.current) {
+        setMigration({ phase: 'running' })
+      }
     } else {
+      cleanupSubscription()
       setMigration({ phase: 'startFailed', message: result.message })
     }
   }
@@ -172,6 +193,7 @@ function App() {
   }
 
   function handleStartAnother(): void {
+    cleanupSubscription()
     setMigration({ phase: 'idle' })
     setOutput('')
     setCancelError(null)

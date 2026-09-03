@@ -282,3 +282,19 @@ Verification:
 
 - pnpm verify: PASS (171 tests)
 - native arm64 workflow executed and passing (validation + smoke test + launch)
+
+## 2026-09-03 — TASK-009D
+
+Status: Complete
+
+Implemented:
+
+- corrected STARTTLS connection-test sequence (no second greeting; post-TLS
+  CAPABILITY before LOGIN)
+- eliminated the migration lifecycle subscription race (listeners registered
+  before startMigration)
+- explicit imapsync log/temp policy (--nolog, --tmpdir, controlled cwd)
+
+Verification:
+
+- pnpm verify: PASS (183 tests)

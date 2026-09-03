@@ -255,4 +255,27 @@ describe('MigrationAdapter', () => {
 
     expect(result).toEqual({ ok: false, message: 'The imapsync runtime is not available.' })
   })
+
+  it('sets a controlled cwd and tmpdir for the spawned process', async () => {
+    const fake = createFakeProcess()
+    const specs: LaunchSpec[] = []
+    const adapter = new MigrationAdapter({
+      launcher: (spec) => {
+        specs.push(spec)
+        return fake.process
+      },
+      executable: 'imapsync',
+      cwd: '/tmp/imapsyncgui',
+    })
+
+    const startPromise = adapter.start(input)
+    fake.emitSpawn()
+    await startPromise
+
+    expect(specs).toHaveLength(1)
+    expect(specs[0].cwd).toBe('/tmp/imapsyncgui')
+    expect(specs[0].args).toContain('--tmpdir')
+    expect(specs[0].args[specs[0].args.indexOf('--tmpdir') + 1]).toBe('/tmp/imapsyncgui')
+    expect(specs[0].args).toContain('--nolog')
+  })
 })

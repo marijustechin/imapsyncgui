@@ -16,6 +16,7 @@ export interface MigrationAdapterOptions {
   executable: string
   prefixArgs?: string[]
   unavailableMessage?: string
+  cwd?: string
   buildArgs?: (input: MigrationInput) => string[]
   onOutput?: OutputListener
   onPhase?: PhaseListener
@@ -35,6 +36,7 @@ export class MigrationAdapter {
   private readonly executable: string
   private readonly prefixArgs: string[]
   private readonly unavailableMessage?: string
+  private readonly cwd?: string
   private readonly buildArgs: (input: MigrationInput) => string[]
   private readonly onOutput?: OutputListener
   private readonly onPhase?: PhaseListener
@@ -49,6 +51,7 @@ export class MigrationAdapter {
     this.executable = options.executable
     this.prefixArgs = options.prefixArgs ?? []
     this.unavailableMessage = options.unavailableMessage
+    this.cwd = options.cwd
     this.buildArgs = options.buildArgs ?? buildMigrationArgs
     this.onOutput = options.onOutput
     this.onPhase = options.onPhase
@@ -70,15 +73,21 @@ export class MigrationAdapter {
     this.cancelRequested = false
     this.setPhase('starting')
 
+    const args = [...this.prefixArgs, ...this.buildArgs(input)]
+    if (this.cwd) {
+      args.push('--tmpdir', this.cwd)
+    }
+
     let process: MigrationProcess
     try {
       process = this.launcher({
         executable: this.executable,
-        args: [...this.prefixArgs, ...this.buildArgs(input)],
+        args,
         env: buildRuntimeEnvironment(globalThis.process.env, {
           password1: input.source.password,
           password2: input.destination.password,
         }),
+        cwd: this.cwd,
       })
     } catch (error) {
       this.setPhase('failed')

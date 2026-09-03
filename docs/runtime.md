@@ -65,6 +65,11 @@ configuration (`PERL5LIB`, `PERL_LOCAL_LIB_ROOT`, `PERL_MB_OPT`, `PERL_MM_OPT`,
 `PERL5OPT`), and adds the ADR-007 credential variables
 (`IMAPSYNC_PASSWORD1` / `IMAPSYNC_PASSWORD2`). Passwords never enter `argv`.
 
+Migration invocation sets a controlled process `cwd` (the OS temporary
+directory) and passes `--nolog` and `--tmpdir <cwd>`, so persistent
+`LOG_imapsync/` and `W/` files are not written into the application or working
+directory.
+
 ## Manifest
 
 `manifest.json` records the runtime format version, architecture, `imapsync`

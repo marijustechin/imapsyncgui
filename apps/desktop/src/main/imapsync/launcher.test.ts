@@ -45,6 +45,16 @@ describe('createNodeProcessLauncher', () => {
     expect(options.env.IMAPSYNC_PASSWORD1).toBe('secret')
   })
 
+  it('passes an explicit cwd to spawn', () => {
+    spawnMock.mockReturnValue(createFakeChild())
+
+    const launcher = createNodeProcessLauncher()
+    launcher({ executable: 'imapsync', args: [], cwd: '/tmp/imapsyncgui' })
+
+    const [, , options] = spawnMock.mock.calls[0]
+    expect(options.cwd).toBe('/tmp/imapsyncgui')
+  })
+
   it('routes kill to the underlying child process', () => {
     const child = createFakeChild()
     spawnMock.mockReturnValue(child)

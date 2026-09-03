@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { existsSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { IPC_CHANNELS, type ConnectionTestResult, type ImapEndpoint } from '../shared/contracts'
 import { testConnection } from './imap/client'
@@ -76,6 +77,7 @@ function createAdapter(): MigrationAdapter {
     launcher: createNodeProcessLauncher(),
     executable: resolution.executable,
     prefixArgs: resolution.prefixArgs,
+    cwd: tmpdir(),
     onOutput: (output) => broadcast(IPC_CHANNELS.output, output),
     onResult: (result) => broadcast(IPC_CHANNELS.lifecycle, toLifecycleEvent(result)),
   })

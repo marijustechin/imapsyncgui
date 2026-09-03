@@ -111,7 +111,7 @@ describe('testConnection', () => {
     expect(connections).toHaveLength(1)
   })
 
-  it('upgrades with STARTTLS before authenticating', async () => {
+  it('upgrades with STARTTLS, issues CAPABILITY, and does not wait for a second greeting', async () => {
     const { layer, connections } = createFakeLayer()
 
     const promise = testConnection(endpoint({ security: 'starttls', port: 143 }), layer)
@@ -120,18 +120,44 @@ describe('testConnection', () => {
     await flush()
     expect(connections[0].written.some((w) => w.includes('STARTTLS'))).toBe(true)
 
-    connections[0].emitData('a0 OK begin TLS\r\n')
+    connections[0].emitData('a1 OK begin TLS\r\n')
     await flush()
 
-    connections[1].emitData('* OK ready (TLS)\r\n')
-    await flush()
-    expect(connections[1].written.some((w) => w.startsWith('a1 LOGIN '))).toBe(true)
+    // No second greeting is sent; the client must proceed to CAPABILITY.
+    expect(connections[1].written.some((w) => w.startsWith('a2 CAPABILITY'))).toBe(true)
 
-    connections[1].emitData('a1 OK done\r\n')
+    connections[1].emitData('* CAPABILITY IMAP4rev1 STARTTLS AUTH=PLAIN\r\n')
+    await flush()
+    connections[1].emitData('a2 OK done\r\n')
+    await flush()
+
+    expect(connections[1].written.some((w) => w.startsWith('a3 LOGIN '))).toBe(true)
+    connections[1].emitData('a3 OK done\r\n')
 
     const result = await promise
 
     expect(result.ok).toBe(true)
+  })
+
+  it('issues LOGIN only after the TLS upgrade completes', async () => {
+    const { layer, connections } = createFakeLayer()
+
+    const promise = testConnection(endpoint({ security: 'starttls', port: 143 }), layer)
+
+    connections[0].emitData('* OK ready\r\n')
+    await flush()
+    connections[0].emitData('a1 OK begin TLS\r\n')
+    await flush()
+
+    // LOGIN must not have been sent on the plaintext connection.
+    expect(connections[0].written.some((w) => w.startsWith('a3 LOGIN ') || w.includes('LOGIN'))).toBe(false)
+
+    connections[1].emitData('a2 OK done\r\n')
+    await flush()
+    expect(connections[1].written.some((w) => w.startsWith('a3 LOGIN '))).toBe(true)
+
+    connections[1].emitData('a3 OK done\r\n')
+    await promise
   })
 
   it('maps authentication failure', async () => {
@@ -164,11 +190,52 @@ describe('testConnection', () => {
     const promise = testConnection(endpoint({ security: 'starttls' }), layer)
     connections[0].emitData('* OK ready\r\n')
     await flush()
-    connections[0].emitData('a0 NO STARTTLS not supported\r\n')
+    connections[0].emitData('a1 NO STARTTLS not supported\r\n')
 
     const result = await promise
 
     expect(result).toEqual({ ok: false, code: 'tls', message: 'The TLS connection could not be established.' })
+  })
+
+  it('maps a malformed STARTTLS response to a protocol failure', async () => {
+    const { layer, connections } = createFakeLayer()
+
+    const promise = testConnection(endpoint({ security: 'starttls' }), layer)
+    connections[0].emitData('* OK ready\r\n')
+    await flush()
+    connections[0].emitData('unexpected garbage\r\n')
+
+    const result = await promise
+
+    expect(result).toEqual({ ok: false, code: 'protocol', message: 'The server returned an unexpected response.' })
+  })
+
+  it('maps a TLS upgrade failure to a TLS failure', async () => {
+    const { layer, connections } = createFakeLayer()
+
+    const promise = testConnection(endpoint({ security: 'starttls' }), layer)
+    connections[0].emitData('* OK ready\r\n')
+    await flush()
+    connections[0].emitData('a1 OK begin TLS\r\n')
+    await flush()
+    connections[1].emitError(Object.assign(new Error('handshake failure'), { code: 'ERR_SSL_WRONG_VERSION_NUMBER' }))
+
+    const result = await promise
+
+    expect(result).toEqual({ ok: false, code: 'tls', message: 'The TLS connection could not be established.' })
+  })
+
+  it('maps a timeout during STARTTLS', async () => {
+    const { layer, connections } = createFakeLayer()
+
+    const promise = testConnection(endpoint({ security: 'starttls' }), layer, { timeoutMs: 1000 })
+    connections[0].emitData('* OK ready\r\n')
+    await flush()
+    connections[0].emitTimeout()
+
+    const result = await promise
+
+    expect(result).toEqual({ ok: false, code: 'timeout', message: 'The connection timed out.' })
   })
 
   it('maps an idle timeout', async () => {
@@ -235,6 +302,19 @@ describe('testConnection', () => {
     connections[0].emitData('* OK ready\r\n')
     await flush()
     connections[0].emitData('a1 NO denied\r\n')
+
+    const result = await promise
+
+    expect(JSON.stringify(result)).not.toContain('supersecret')
+  })
+
+  it('never exposes credentials in STARTTLS failures', async () => {
+    const { layer, connections } = createFakeLayer()
+
+    const promise = testConnection(endpoint({ security: 'starttls', password: 'supersecret' }), layer)
+    connections[0].emitData('* OK ready\r\n')
+    await flush()
+    connections[0].emitData('a1 NO rejected\r\n')
 
     const result = await promise
 

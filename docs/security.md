@@ -44,6 +44,15 @@ Only an explicit allowlist of `imapsync` arguments is generated
 executable path and never introduces arbitrary flags; each user value is passed
 as a single argument value.
 
+## imapsync log and temp policy
+
+Production invocation disables persistent `imapsync` file logging (`--nolog`),
+directs temporary files to a controlled directory (`--tmpdir <cwd>`), and sets
+an explicit process `cwd` equal to the OS temporary directory. Persistent
+`LOG_imapsync/` and `W/` directories are therefore not created in the
+application or working directory, and only sanitized stdout/stderr is streamed
+to the renderer. Log/temp paths are never derived from renderer input.
+
 ## Passwords
 
 Passwords are sensitive transient data. For the first release:
