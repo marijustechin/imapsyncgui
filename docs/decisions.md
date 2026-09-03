@@ -302,17 +302,23 @@ reliable option for x86_64 and removes the manual Perl build entirely.
 - `imapsync` redistribution is permitted by NLPL; bundled Perl/OpenSSL/module
   license texts are shipped under `runtime/<arch>/licenses/`.
 
-## ADR-013 — arm64 runtime: self-built portable Perl (blocked on native hardware)
+## ADR-013 — arm64 runtime: self-built standalone binary via PAR::Packer (blocked on native hardware)
 
 - **Status:** accepted (strategy); implementation blocked
 - **Date:** 2026-09-02
 
 No official native arm64 standalone `imapsync` binary exists (the upstream
 `imapsync_bin_Darwin_x86_64` is x86_64-only; the arm64 URL returns 404). The
-arm64 strategy is therefore **Option B**: build a relocatable native arm64 Perl
-(`-Duserelocatableinc -Duseshrplib`) on Apple Silicon, install the required
-modules (including `Net::SSLeay`/`IO::Socket::SSL` against a bundled OpenSSL),
-and stage them under `runtime/darwin-arm64/`.
+arm64 strategy is therefore strategy-hierarchy item 2: build a native arm64
+standalone binary using PAR::Packer on Apple Silicon, from the upstream
+`imapsync` script plus its required modules (including
+`Net::SSLeay`/`IO::Socket::SSL` against a bundled OpenSSL), and stage it under
+`runtime/darwin-arm64/`.
+
+The build uses the current Homebrew `perl` (unversioned) as a build-time
+toolchain only; the embedded Perl version is recorded dynamically in the
+manifest. Versioned Homebrew Perl formulae are not used because they are
+removed from Homebrew over time.
 
 ### Alternatives considered
 

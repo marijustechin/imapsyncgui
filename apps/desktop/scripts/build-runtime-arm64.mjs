@@ -6,11 +6,11 @@
 // Apple Silicon so the produced binary is arm64.
 //
 // NATIVE EXECUTION IS MANDATORY: this script refuses to run on a non-arm64
-// host. It has not been executed or verified on this repository's x86_64 host.
+// host.
 
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -20,7 +20,21 @@ const licensesDir = join(dirname(fileURLToPath(import.meta.url)), 'licenses')
 
 const IMAPSYNC_VERSION = '2.314'
 const IMAPSYNC_SCRIPT_URL = 'https://imapsync.lamiral.info/imapsync'
-const PERL_MAJOR = '5.34'
+
+const REQUIRED_MODULES = [
+  'Authen::NTLM',
+  'IO::Tee',
+  'Mail::IMAPClient',
+  'Unicode::String',
+  'Sys::MemInfo',
+  'File::Tail',
+  'Proc::ProcessTable',
+  'Test::MockObject',
+  'Readonly',
+  'Data::Uniqid',
+  'JSON::WebToken',
+  'IO::Socket::SSL',
+]
 
 const LICENSE_FILES = [
   'imapsync-LICENSE.txt',
@@ -29,8 +43,12 @@ const LICENSE_FILES = [
   'openssl-LICENSE.txt',
 ]
 
-function sh(command, args) {
-  return execFileSync(command, args, { encoding: 'utf8', stdio: 'inherit' })
+function sh(command, args, env) {
+  return execFileSync(command, args, { encoding: 'utf8', stdio: 'inherit', env: { ...process.env, ...env } })
+}
+
+function capture(command, args) {
+  return execFileSync(command, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
 }
 
 function sha256Hex(buffer) {
@@ -54,11 +72,17 @@ function main() {
   mkdirSync(binDir, { recursive: true })
 
   console.log('installing build-time prerequisites (build machine only, not runtime deps)')
-  sh('brew', ['install', `perl@${PERL_MAJOR}`, 'cpanminus', 'openssl@3'])
+  sh('brew', ['install', 'perl', 'cpanminus', 'openssl@3'])
+
+  const perlVersion = capture('perl', ['-e', 'print $^V']).replace(/^v/, '')
+  console.log(`build perl version: ${perlVersion}`)
+
+  const opensslPrefix = capture('brew', ['--prefix', 'openssl@3'])
+  console.log(`build openssl prefix: ${opensslPrefix}`)
 
   console.log('installing imapsync prerequisites into the build perl')
-  for (const module of ['Authen::NTLM', 'IO::Tee', 'Mail::IMAPClient', 'Unicode::String', 'Sys::MemInfo', 'File::Tail', 'Proc::ProcessTable', 'Test::MockObject', 'Readonly', 'Data::Uniqid', 'JSON::WebToken', 'IO::Socket::SSL']) {
-    sh('cpanm', ['--notest', module])
+  for (const module of REQUIRED_MODULES) {
+    sh('cpanm', ['--notest', module], { OPENSSL_PREFIX: opensslPrefix })
   }
 
   console.log('installing PAR::Packer (to produce a self-contained binary)')
@@ -85,12 +109,12 @@ function main() {
     formatVersion: 1,
     architecture: 'darwin-arm64',
     imapsyncVersion: IMAPSYNC_VERSION,
-    perlVersion: `${PERL_MAJOR} (embedded via PAR::Packer)`,
+    perlVersion: `${perlVersion} (embedded via PAR::Packer)`,
     opensslVersion: 'embedded',
     builtAt: new Date().toISOString(),
     components: [
       { name: 'imapsync', version: IMAPSYNC_VERSION, license: 'NLPL', source: IMAPSYNC_SCRIPT_URL },
-      { name: 'perl', version: `${PERL_MAJOR} (embedded)`, license: 'Artistic-1.0 or GPL-1.0-or-later', source: 'https://www.perl.org/' },
+      { name: 'perl', version: `${perlVersion} (embedded)`, license: 'Artistic-1.0 or GPL-1.0-or-later', source: 'https://www.perl.org/' },
       { name: 'openssl', version: 'embedded', license: 'OpenSSL + Apache-SSLeay', source: 'https://www.openssl.org/' },
       { name: 'perl modules (CPAN)', version: 'embedded', license: 'Artistic-1.0 or GPL-1.0-or-later', source: 'https://metacpan.org/' },
     ],
