@@ -55,9 +55,10 @@ function main() {
 
   const env = isolationEnv()
 
+  const expectedArch = runtimeArch === 'darwin-arm64' ? 'arm64' : 'x86_64'
   const fileOutput = run('file', [binary], env).trim()
-  if (!fileOutput.includes('x86_64')) {
-    fail(`bundled imapsync is not x86_64: ${fileOutput}`)
+  if (!fileOutput.includes(expectedArch)) {
+    fail(`bundled imapsync is not ${expectedArch}: ${fileOutput}`)
   }
   console.log(`architecture: ${fileOutput}`)
 
