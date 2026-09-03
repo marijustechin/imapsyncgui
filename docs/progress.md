@@ -247,28 +247,23 @@ Decisions:
 
 ## 2026-09-02 — TASK-009B
 
-Status: Blocked (native arm64 execution environment unavailable)
+Status: Complete (native arm64 evidence)
 
-Research:
+Implemented:
 
-- re-checked upstream: no official arm64 standalone binary exists
-  (`imapsync_bin_Darwin_arm64` → HTTP 404); the official binary is x86_64-only.
-- host is x86_64 with no Apple Silicon hardware or arm64 macOS CI runner.
+- self-built arm64 standalone `imapsync` runtime via PAR::Packer (ADR-013)
+- build recipe uses current Homebrew `perl` (not versioned formulae) and
+  installs the full required CPAN module set into the build perl
+- runtime build/validate/self-test/package/smoke verified natively
 
-Implemented (verifiable without arm64 hardware):
+Verification (native `macos-15` arm64 runner, ADR-014):
 
-- ADR-013: arm64 strategy = self-built standalone binary via PAR::Packer.
-- `pnpm runtime:build:arm64` recipe (`scripts/build-runtime-arm64.mjs`), which
-  refuses to run on a non-arm64 host.
-- arm64 resolution/no-fallback unit tests.
-
-Verification:
-
-- pnpm verify: PASS
-- tests: 171 passing
-
-Blocker: native Apple Silicon execution is mandatory before the arm64 runtime
-can be declared verified; TASK-009B is not complete.
+- pnpm verify: PASS (171 tests)
+- runtime binary: Mach-O arm64, links only system `libSystem`
+- runtime validation OK; self-test OK (host isolation)
+- packaged arm64 `.app` built; packaged smoke test OK from inside the `.app`
+- `.app` launched (best effort); artifacts uploaded
+- manifest records imapsync 2.324 + script SHA-256
 
 ## 2026-09-02 — TASK-009C
 
@@ -285,9 +280,5 @@ Implemented:
 
 Verification:
 
-- pnpm verify: PASS
-- tests: 171 passing
-
-Honest status: the workflow is authored but not yet executed (the repository is
-not currently published to GitHub Actions), so no native arm64 evidence exists
-yet; TASK-009B remains Blocked pending a native run.
+- pnpm verify: PASS (171 tests)
+- native arm64 workflow executed and passing (validation + smoke test + launch)

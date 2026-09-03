@@ -97,34 +97,29 @@ inside the packaged `.app`, in a host-isolation environment.
 
 ## Status and known limitations
 
-- **Host architecture:** `x86_64` (Intel). The `darwin-x64` self-contained
-  runtime is staged, validated, self-tested, packaged, and smoke-tested
-  successfully.
-- **`darwin-arm64`:** not built or verified. No official arm64 standalone
-  binary exists (the upstream `imapsync_bin_Darwin_x86_64` is x86_64-only), and
-  there is no Apple Silicon host or arm64 macOS CI runner available, so
-  TASK-009B is **blocked**. The strategy is ADR-013 (self-built arm64
-  standalone binary via PAR::Packer) and the repository recipe is
-  `pnpm runtime:build:arm64` (`scripts/build-runtime-arm64.mjs`), which refuses
-  to run on a non-arm64 host.
-- A native arm64 CI workflow (`.github/workflows/macos-arm64.yml`, ADR-014)
-  runs the full build/validate/self-test/package/smoke sequence on a
-  GitHub-hosted `macos-15` arm64 runner. It is authored but not yet executed;
-  a native run is required to unblock TASK-009B.
+- **`darwin-x64`:** self-contained official `imapsync` binary, staged, validated,
+  self-tested, packaged, and smoke-tested successfully.
+- **`darwin-arm64`:** built and verified natively via the GitHub Actions
+  `macos-15` arm64 runner (ADR-014). The self-built PAR::Packer binary is arm64,
+  links only system `libSystem`, passes host-isolation self-test, and the
+  packaged smoke test passes from inside the arm64 `.app`. No official arm64
+  standalone binary exists, so the runtime is self-built from the upstream
+  `imapsync` script (ADR-013).
 - The 3 failing `imapsync --tests` cases are IPv6 DNS lookups (`test1ipv6.*`),
   which require network; all offline module/SSL checks pass.
 
 ## Provenance
 
-- `imapsync` 2.314 self-contained binary — upstream
+- **`darwin-x64`:** `imapsync` 2.314 self-contained binary — upstream
   `https://imapsync.lamiral.info/dist/imapsync_bin_Darwin_x86_64`, SHA-256
-  `cf15ed54a50bdbc9a1f4e118916a95e7bb36deb2c1b6f643d16b84223cc49b88`, under the
-  NLPL license.
-- Perl (embedded, ~5.34) — `https://www.perl.org/`, Artistic-1.0 /
-  GPL-1.0-or-later.
-- OpenSSL (embedded) — OpenSSL License + Apache-SSLeay.
-- CPAN modules (embedded) — see `docs/third-party-licenses.md`.
+  `cf15ed54a50bdbc9a1f4e118916a95e7bb36deb2c1b6f643d16b84223cc49b88`, NLPL.
+  Perl (embedded, ~5.34), OpenSSL (embedded), CPAN modules (embedded).
+- **`darwin-arm64`:** self-built PAR::Packer binary from the upstream `imapsync`
+  script (`https://imapsync.lamiral.info/imapsync`). The exact `imapsync`
+  version (currently 2.324) and script SHA-256 are recorded dynamically in the
+  manifest. Build-time Perl is the current Homebrew `perl` (5.42); OpenSSL 3 and
+  the CPAN module set are embedded.
 
-The build pins the binary URL + SHA-256 rather than relying on mutable
-`latest` references. License texts are staged into the runtime and shipped with
-the application.
+The x64 binary is pinned by URL + SHA-256; the arm64 recipe records the exact
+`imapsync` version + script SHA-256. License texts are staged into the runtime
+and shipped with the application.

@@ -1,28 +1,34 @@
 # Third-party runtime components
 
-This document lists the third-party components intended to be bundled with the
-packaged `imapsync` runtime, their versions, sources, and licenses. The table is
-based on upstream documentation and the Homebrew `imapsync` formula's bundled
-contents as observed on the development machine.
+This document lists the third-party components bundled with the packaged
+`imapsync` runtime, their versions, sources, and licenses. The table is based on
+upstream documentation and the Homebrew `imapsync` formula's bundled contents.
+
+The x86_64 runtime embeds components from the official
+`imapsync_bin_Darwin_x86_64` binary (imapsync 2.314, Perl ~5.34). The arm64
+runtime is a self-built PAR::Packer binary (ADR-013) embedding the current
+upstream `imapsync` script (2.324 at build time), the current Homebrew `perl`
+(5.42 at build time), and OpenSSL 3; exact versions are recorded in the runtime
+manifest.
 
 ## Components
 
-| Component | Version | Source | License | Redistribution |
-| --------- | ------- | ------ | ------- | -------------- |
-| imapsync | 2.314 | https://imapsync.lamiral.info/ | NLPL (No Limit Public License) | Permissive ("no limits to do anything"), but distributed commercially by the author |
-| Perl | 5.34.x | https://www.perl.org/ | Artistic-1.0 or GPL-1.0-or-later (dual) | Permissive/copyleft dual; must ship license text |
-| Mail::IMAPClient | bundled | https://metacpan.org/pod/Mail::IMAPClient | Artistic-1.0 or GPL-1.0-or-later | Permissive/copyleft dual |
-| IO::Socket::SSL | bundled | https://metacpan.org/pod/IO::Socket::SSL | Artistic-1.0 or GPL-1.0-or-later | Permissive/copyleft dual |
-| Net::SSLeay | bundled | https://metacpan.org/pod/Net::SSLeay | Artistic-2.0 or BSD | Permissive |
-| Authen::NTLM | bundled | https://metacpan.org/pod/Authen::NTLM | Artistic-1.0 or GPL-1.0-or-later | Permissive/copyleft dual |
-| Unicode::String | bundled | https://metacpan.org/pod/Unicode::String | Artistic-1.0 or GPL-1.0-or-later | Permissive/copyleft dual |
-| Sys::MemInfo | bundled | https://metacpan.org/pod/Sys::MemInfo | Artistic-1.0 or GPL-1.0-or-later | Permissive/copyleft dual |
-| Data::Uniqid | bundled | https://metacpan.org/pod/Data::Uniqid | Artistic-1.0 or GPL-1.0-or-later | Permissive/copyleft dual |
-| JSON::WebToken | bundled | https://metacpan.org/pod/JSON::WebToken | Artistic-1.0 or GPL-1.0-or-later | Permissive/copyleft dual |
-| File::Tail | bundled | https://metacpan.org/pod/File::Tail | Artistic-1.0 or GPL-1.0-or-later | Permissive/copyleft dual |
-| IO::Tee | bundled | https://metacpan.org/pod/IO::Tee | Artistic-1.0 or GPL-1.0-or-later | Permissive/copyleft dual |
-| Readonly | bundled | https://metacpan.org/pod/Readonly | Artistic-1.0 or GPL-1.0-or-later | Permissive/copyleft dual |
-| OpenSSL | bundled | https://www.openssl.org/ | OpenSSL License + Apache-SSLeay | Permissive; must ship license text |
+| Component | x86_64 version | arm64 version | Source | License |
+| --------- | -------------- | ------------- | ------ | ------- |
+| imapsync | 2.314 (binary) | 2.324 (script, recorded at build) | https://imapsync.lamiral.info/ | NLPL (No Limit Public License) |
+| Perl | ~5.34 (embedded) | 5.42 (embedded) | https://www.perl.org/ | Artistic-1.0 or GPL-1.0-or-later (dual) |
+| OpenSSL | embedded | 3.x (embedded) | https://www.openssl.org/ | OpenSSL License + Apache-SSLeay |
+| Mail::IMAPClient | bundled | bundled | https://metacpan.org/pod/Mail::IMAPClient | Artistic-1.0 or GPL-1.0-or-later |
+| IO::Socket::SSL | bundled | bundled | https://metacpan.org/pod/IO::Socket::SSL | Artistic-1.0 or GPL-1.0-or-later |
+| Net::SSLeay | bundled | bundled | https://metacpan.org/pod/Net::SSLeay | Artistic-2.0 or BSD |
+| Authen::NTLM | bundled | bundled | https://metacpan.org/pod/Authen::NTLM | Artistic-1.0 or GPL-1.0-or-later |
+| Unicode::String | bundled | bundled | https://metacpan.org/pod/Unicode::String | Artistic-1.0 or GPL-1.0-or-later |
+| Sys::MemInfo | bundled | bundled | https://metacpan.org/pod/Sys::MemInfo | Artistic-1.0 or GPL-1.0-or-later |
+| Data::Uniqid | bundled | bundled | https://metacpan.org/pod/Data::Uniqid | Artistic-1.0 or GPL-1.0-or-later |
+| JSON::WebToken | bundled | bundled | https://metacpan.org/pod/JSON::WebToken | Artistic-1.0 or GPL-1.0-or-later |
+| File::Tail | bundled | bundled | https://metacpan.org/pod/File::Tail | Artistic-1.0 or GPL-1.0-or-later |
+| IO::Tee | bundled | bundled | https://metacpan.org/pod/IO::Tee | Artistic-1.0 or GPL-1.0-or-later |
+| Readonly | bundled | bundled | https://metacpan.org/pod/Readonly | Artistic-1.0 or GPL-1.0-or-later |
 
 ## Notes and blockers
 

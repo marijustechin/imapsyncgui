@@ -475,23 +475,22 @@ On completion:
 
 ## Status
 
-Complete (workflow authored; native run is the remaining external step).
+Complete.
 
-Implemented:
+The native arm64 workflow (`.github/workflows/macos-arm64.yml`, ADR-014) has
+been executed on the GitHub-hosted `macos-15` arm64 runner and passes end to
+end:
 
-- `.github/workflows/macos-arm64.yml` — a GitHub Actions workflow on the
-  GitHub-hosted `macos-15` Apple Silicon runner (ADR-014). It hard-fails unless
-  `uname -m` and Node `process.arch` are both `arm64`, never invokes Rosetta or
-  `arch -x86_64`, uses Corepack + `pnpm install --frozen-lockfile`, and calls
-  the existing repository scripts in sequence:
-  `verify` → `runtime:build:arm64` → `runtime:validate` → `runtime:self-test`
-  → `package:mac:arm64` → architecture inspection → `package:smoke` →
-  best-effort app launch → artifact upload.
-- Documentation updated (ADR-014, README, `docs/runtime.md`, `docs/testing.md`).
+- runner verified arm64 (`uname -m`, Node `process.arch`);
+- `pnpm verify` passes on arm64;
+- `runtime:build:arm64` produces a Mach-O arm64 PAR::Packer binary;
+- `runtime:validate` → arch/manifest/`otool -L` OK (only system `libSystem`);
+- `runtime:self-test` → OK under host isolation;
+- `package:mac:arm64` → arm64 `.app` built;
+- architecture inspection → Electron and runtime binary both arm64;
+- `package:smoke` → OK from inside the arm64 `.app`;
+- application launched (best effort); artifact uploaded.
 
-Honest limitation: the workflow has **not been executed** — the repository is
-not currently published to GitHub Actions, and the local host is x86_64. Native
-arm64 evidence will exist only after the workflow is dispatched on GitHub.
-Therefore **TASK-009B remains Blocked** pending that native run.
-
-Local `pnpm verify` passes (171 tests).
+This native evidence satisfies TASK-009B's acceptance criteria, so TASK-009B is
+now Complete (archived as `tasks/done/TASK-009B.md`); the arm64-runtime blocker
+has been removed from the backlog.

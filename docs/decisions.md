@@ -302,18 +302,17 @@ reliable option for x86_64 and removes the manual Perl build entirely.
 - `imapsync` redistribution is permitted by NLPL; bundled Perl/OpenSSL/module
   license texts are shipped under `runtime/<arch>/licenses/`.
 
-## ADR-013 — arm64 runtime: self-built standalone binary via PAR::Packer (blocked on native hardware)
+## ADR-013 — arm64 runtime: self-built standalone binary via PAR::Packer
 
-- **Status:** accepted (strategy); implementation blocked
+- **Status:** accepted
 - **Date:** 2026-09-02
 
 No official native arm64 standalone `imapsync` binary exists (the upstream
 `imapsync_bin_Darwin_x86_64` is x86_64-only; the arm64 URL returns 404). The
-arm64 strategy is therefore strategy-hierarchy item 2: build a native arm64
-standalone binary using PAR::Packer on Apple Silicon, from the upstream
-`imapsync` script plus its required modules (including
-`Net::SSLeay`/`IO::Socket::SSL` against a bundled OpenSSL), and stage it under
-`runtime/darwin-arm64/`.
+arm64 runtime is therefore built as a native arm64 standalone binary using
+PAR::Packer on Apple Silicon, from the upstream `imapsync` script plus its
+required modules (including `Net::SSLeay`/`IO::Socket::SSL` against a bundled
+OpenSSL), and staged under `runtime/darwin-arm64/`.
 
 The build uses the current Homebrew `perl` (unversioned) as a build-time
 toolchain only; the embedded Perl version is recorded dynamically in the
@@ -327,13 +326,12 @@ removed from Homebrew over time.
 - **Rosetta 2 / x86_64 binary:** rejected (ADR-008; Rosetta is deprecated and
   the task forbids it).
 
-### Blocker
+### Verification
 
-The current development host is `x86_64`; there is no Apple Silicon hardware or
-arm64 macOS CI runner available. Native arm64 execution is mandatory before the
-runtime can be declared verified, so **TASK-009B remains blocked**. A
-repository-controlled recipe (`scripts/build-runtime-arm64.mjs`) captures the
-build, but it has not been executed or verified.
+The strategy was validated natively on a GitHub-hosted `macos-15` arm64 runner
+(ADR-014): the produced binary is arm64, links only system `libSystem`, passes
+host-isolation self-test, and the packaged smoke test passes from inside the
+arm64 `.app`.
 
 ## ADR-014 — Native arm64 verification via GitHub Actions
 
