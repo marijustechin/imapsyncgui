@@ -25,16 +25,20 @@ const CPANM_URL = 'https://cpanmin.us'
 
 const REQUIRED_MODULES = [
   'Authen::NTLM',
-  'IO::Tee',
-  'Mail::IMAPClient',
-  'Unicode::String',
-  'Sys::MemInfo',
-  'File::Tail',
-  'Proc::ProcessTable',
-  'Test::MockObject',
-  'Readonly',
   'Data::Uniqid',
+  'Encode::IMAPUTF7',
+  'File::Copy::Recursive',
+  'File::Tail',
+  'IO::Socket::IP',
+  'IO::Tee',
+  'JSON',
   'JSON::WebToken',
+  'Mail::IMAPClient',
+  'Module::Build::Tiny',
+  'Readonly',
+  'Sys::MemInfo',
+  'Test::MockObject',
+  'Unicode::String',
   'IO::Socket::SSL',
 ]
 
