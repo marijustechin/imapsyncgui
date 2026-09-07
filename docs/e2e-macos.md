@@ -20,13 +20,21 @@ This document is the honest record of what has and has not been verified.
 
 ## Artifacts
 
+Published as a GitHub pre-release (downloadable from the normal GitHub Releases
+page):
+
+- Release tag: `v0.1.0-e2e.1`
+- URL: https://github.com/marijustechin/imapsyncgui/releases/tag/v0.1.0-e2e.1
+
 | Architecture | Filename | imapsync | Runtime | SHA-256 |
 | ------------ | -------- | -------- | ------- | ------- |
 | x86_64 | `imapSyncGUI-0.1.0-mac-x64.zip` | 2.314 (official binary) | self-contained `imapsync_bin_Darwin_x86_64` | `b136ba52a3b58d61560617dae4368fce2943bebeb4df2c0b9ddef2abeb974c5a` |
-| arm64 | `imapSyncGUI-0.1.0-mac-arm64.zip` | 2.324 (self-built) | self-contained PAR::Packer binary (Perl 5.44 embedded) | `d9bb1165bfad2bd7a075028851ae07f00ae162c0946894c912946ecf6c947e9a` |
+| arm64 | `imapSyncGUI-0.1.0-mac-arm64.zip` | 2.324 (self-built) | self-contained PAR::Packer binary (Perl 5.44 embedded) | `bb81163b656b88dd64652ab67ee8a5013559b0812b29d10436346b8b022031c8` |
 
 Application version `0.1.0`. Artifacts were produced from commit `1559874`
 (`Fix STARTTLS flow, migration lifecycle race, and imapsync log policy`).
+A `SHA256SUMS.txt` accompanies the release; both artifacts were re-downloaded
+from the release and their checksums verified (`shasum -a 256 -c`).
 
 ## Automated / packaged verification (completed)
 

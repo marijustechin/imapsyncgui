@@ -320,3 +320,7 @@ Blocker: the real clean-machine workflow (download/extract, Gatekeeper, launch,
 real IMAP connection tests, real mailbox migration, cancellation, repeat,
 residue inspection) requires clean macOS hardware, controlled test mailboxes,
 and an interactive session, none available in the agent environment.
+
+Published: a downloadable GitHub pre-release `v0.1.0-e2e.1` with both artifacts
+and a `SHA256SUMS.txt`; both artifacts were re-downloaded from the release and
+their checksums verified.
