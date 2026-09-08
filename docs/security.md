@@ -136,11 +136,31 @@ identities and never renders passwords or complete credential-bearing objects.
 
 ## Code signing and notarization
 
-Distributable artifacts are currently **unsigned and not notarized**. No
-Apple Developer identity is used and no signing is faked. Unsigned macOS apps
-are subject to Gatekeeper; users must explicitly allow the app to run, and this
-must not be worked around by disabling macOS security mechanisms. Signing and
-notarization are a deferred follow-up task (see `tasks/backlog.md`).
+Distributable artifacts are **ad-hoc signed but not Developer ID signed and not
+notarized**. No Apple Developer identity or certificate is used.
+
+- **Ad-hoc signing** (`codesign --sign -`, i.e. `identity: '-'` in
+  electron-builder) is applied to the whole `.app` bundle so every Mach-O
+  executable inside carries a valid signature. This is required by macOS on
+  Apple Silicon: arm64 executables must be signed, and a bundle whose main
+  executable is only linker-signed (with no sealed resources) is misreported by
+  Gatekeeper as *damaged* rather than *unidentified developer*. Ad-hoc signing
+  produces a consistent, valid signature so the normal Gatekeeper flow
+  (`Privacy & Security → Open Anyway`) applies. It is not Apple Developer
+  Program signing and provides no identity, no notarization, and no
+  revocation-based trust.
+- **Not notarized:** the app is not submitted to Apple's notary service.
+
+The bundled `imapsync` runtime binary (`<resources>/runtime/<arch>/bin/imapsync`)
+is excluded from the signature seal (`signIgnore`). The official x86_64 binary
+cannot be re-signed by `codesign`; it is legitimately unsigned (x86_64 does not
+require signing). The self-built arm64 binary is already linker-signed (ad-hoc)
+at build time, which is sufficient for it to execute.
+
+Unsigned/ad-hoc-signed apps are subject to Gatekeeper; users must explicitly
+allow the app to run, and this must not be worked around by disabling macOS
+security mechanisms. Developer ID signing and notarization are a deferred
+follow-up task (see `tasks/backlog.md`). See ADR-015.
 
 ## Packaged runtime
 

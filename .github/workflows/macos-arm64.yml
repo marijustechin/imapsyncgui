@@ -70,6 +70,13 @@ jobs:
           echo "--- manifest ---"
           cat "$APP/Contents/Resources/runtime/darwin-arm64/manifest.json"
 
+      - name: Verify ad-hoc signature
+        working-directory: apps/desktop
+        run: |
+          APP=$(find release -maxdepth 2 -name 'imapSyncGUI.app' -type d | head -1)
+          codesign -dv --verbose=2 "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
       - name: Packaged runtime smoke test
         run: pnpm --filter @imapsyncgui/desktop run package:smoke
 
@@ -89,11 +96,58 @@ jobs:
             cat /tmp/app-launch.log
           fi
 
+      - name: Verify DMG (hdiutil verify)
+        working-directory: apps/desktop
+        run: |
+          DMG=$(ls release/*-mac-arm64.dmg)
+          echo "dmg: $DMG"
+          hdiutil verify "$DMG"
+
+      - name: Mount DMG and inspect mounted volume
+        working-directory: apps/desktop
+        run: |
+          DMG=$(ls release/*-mac-arm64.dmg)
+          MOUNT_OUTPUT=$(hdiutil attach -nobrowse -readonly "$DMG")
+          echo "$MOUNT_OUTPUT"
+          VOLUME=$(echo "$MOUNT_OUTPUT" | awk -F'\t' '/Apple_HFS/ {print $3}' | tail -1)
+          echo "volume: $VOLUME"
+          echo "VOLUME=$VOLUME" >> "$GITHUB_ENV"
+          ls -la "$VOLUME"
+          test -d "$VOLUME/imapSyncGUI.app"
+          test -L "$VOLUME/Applications"
+          file "$VOLUME/imapSyncGUI.app/Contents/MacOS/imapSyncGUI"
+          file "$VOLUME/imapSyncGUI.app/Contents/Resources/runtime/darwin-arm64/bin/imapsync"
+
+      - name: Smoke test app copied from DMG
+        working-directory: apps/desktop
+        run: |
+          COPY_DIR=$(mktemp -d)
+          ditto "$VOLUME/imapSyncGUI.app" "$COPY_DIR/imapSyncGUI.app"
+          echo "copied app to $COPY_DIR"
+          file "$COPY_DIR/imapSyncGUI.app/Contents/MacOS/imapSyncGUI"
+          codesign --verify --deep --strict --verbose=2 "$COPY_DIR/imapSyncGUI.app"
+          pnpm --filter @imapsyncgui/desktop run package:smoke --arch arm64 --app "$COPY_DIR/imapSyncGUI.app"
+
+      - name: Detach DMG
+        if: always()
+        run: |
+          if [ -n "$VOLUME" ] && [ -d "$VOLUME" ]; then
+            hdiutil detach "$VOLUME" || true
+          fi
+
+      - name: Compute artifact checksums
+        working-directory: apps/desktop
+        run: |
+          cd release
+          shasum -a 256 *-mac-arm64.dmg *-mac-arm64.zip | tee SHA256SUMS-arm64.txt
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: imapSyncGUI-mac-arm64
           path: |
+            apps/desktop/release/*-mac-arm64.dmg
             apps/desktop/release/*-mac-arm64.zip
+            apps/desktop/release/SHA256SUMS-arm64.txt
             apps/desktop/release/**/imapSyncGUI.app/Contents/Resources/runtime/darwin-arm64/manifest.json
           if-no-files-found: error

@@ -359,3 +359,51 @@ macOS runner via `.github/workflows/macos-arm64.yml` (manual
   evidence that unblocks TASK-009B.
 - Build-time Homebrew is used only as a CI build dependency; it is not a runtime
   dependency of the packaged application.
+
+## ADR-015 — Ad-hoc signing of distributable bundles (no Developer ID)
+
+- **Status:** accepted
+- **Date:** 2026-09-08
+
+Distributable `.app` bundles are ad-hoc signed as a whole (`codesign --sign -`,
+electron-builder `identity: '-'`, `hardenedRuntime: false`). This is **not**
+Apple Developer Program signing and **not** notarization.
+
+### Problem this solves
+
+The first E2E pre-release (`v0.1.0-e2e.1`) shipped ZIPs built with
+`identity: null` (no signing). Evidence gathered for TASK-010B showed:
+
+- the x86_64 `.app` is completely unsigned — macOS presents the normal
+  "unidentified developer" Gatekeeper flow, and `Open Anyway` works;
+- the arm64 `.app` main executable is only *linker-signed* (ad-hoc) with no
+  sealed resources and no bundle-level `_CodeSignature/CodeResources`. On Apple
+  Silicon, Gatekeeper reports such a bundle as *damaged* ("move to Trash")
+  rather than *unidentified developer*, and `spctl --assess` rejects it with
+  "code has no resources but signature indicates they must be present".
+
+Ad-hoc signing the whole bundle turns the arm64 "damaged" state into a
+consistent, valid (ad-hoc) signature, which Gatekeeper presents as the normal
+"unidentified developer" flow that `Open Anyway` resolves. This matches the
+observed x86_64 behavior.
+
+### Alternatives considered
+
+- **Remain fully unsigned (`identity: null`):** rejected — on Apple Silicon the
+  arm64 bundle is misreported as damaged, blocking the real E2E test.
+- **Developer ID signing + notarization:** the correct long-term answer, but
+  requires Apple Developer Program credentials; out of scope (see
+  `tasks/backlog.md`).
+- **Universal build / Rosetta:** rejected (ADR-008).
+
+### Details and consequences
+
+- `hardenedRuntime: false` is required: hardened runtime library validation
+  rejects the pre-signed Electron frameworks under an ad-hoc identity.
+- The bundled `imapsync` runtime binary is excluded from the seal
+  (`signIgnore: ['/bin/imapsync$']`): the official x86_64 PAR::Packer binary
+  cannot be re-signed by `codesign` ("main executable failed strict
+  validation"), and the self-built arm64 binary is already linker-signed.
+- The DMG itself is not signed (electron-builder default).
+- No Apple trust/revocation is claimed; the app remains "unidentified
+  developer" for Gatekeeper purposes.

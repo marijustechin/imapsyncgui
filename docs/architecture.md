@@ -115,12 +115,20 @@ macOS artifacts:
 - `extraResources` → the matching `runtime/<arch>` copied to
   `Contents/Resources/runtime/<arch>` (outside ASAR, executable);
 - `artifactName: ${productName}-${version}-mac-${arch}.${ext}` → architecture is
-  always identifiable from the filename.
+  always identifiable from the filename;
+- `target: ['dmg', 'zip']` → a DMG (primary TASK-010 distribution) and a ZIP
+  (secondary) per architecture;
+- the DMG contains `imapSyncGUI.app` and an `/Applications` link for the
+  conventional drag-to-install flow;
+- `identity: '-'` (ad-hoc signing) with `hardenedRuntime: false` — every Mach-O
+  in the bundle is ad-hoc signed so arm64 builds are not misreported as
+  "damaged" by Gatekeeper (see ADR-015). This is not Developer ID signing and
+  not notarization.
 
 Application identity (`com.imapsyncgui.desktop`, product name `imapSyncGUI`,
 version `0.1.0`) and packaging metadata live in
-`apps/desktop/package.json` / `src/main/packaging.ts`. Artifacts are unsigned
-for now; signing/notarization is a deferred follow-up.
+`apps/desktop/package.json` / `src/main/packaging.ts`. Developer ID
+signing/notarization is a deferred follow-up.
 
 ## macOS architecture and distribution
 

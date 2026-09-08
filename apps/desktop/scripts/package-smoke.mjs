@@ -42,8 +42,10 @@ function main() {
   const runtimeArch = archArg === 'x64' ? 'darwin-x64' : archArg === 'arm64' ? 'darwin-arm64' : null
   if (runtimeArch === null) fail(`unsupported architecture: ${archArg}`)
 
-  const app = findApp()
+  const appPathArg = arg('--app')
+  const app = appPathArg ? resolve(appPathArg) : findApp()
   if (!app) fail(`no packaged .app found under ${releaseDir}`)
+  if (appPathArg && !existsSync(app)) fail(`app path does not exist: ${app}`)
 
   const resources = join(app, 'Contents', 'Resources')
   const runtimeDir = join(resources, 'runtime', runtimeArch)

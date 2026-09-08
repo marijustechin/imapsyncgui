@@ -75,8 +75,9 @@ pnpm package:mac:arm64
 pnpm package:smoke
 ```
 
-Artifacts are written to `apps/desktop/release`. They are currently **unsigned
-and not notarized**.
+Artifacts are written to `apps/desktop/release` (`.dmg` + `.zip`). The `.app`
+bundle is **ad-hoc signed** (no Developer ID) and **not notarized** — see
+ADR-015 and `docs/security.md`.
 
 > Status: the x86_64 runtime is a self-contained official `imapsync` binary
 > (ADR-012) and is bundled, validated, self-tested, packaged, and smoke-tested.

@@ -95,10 +95,13 @@ runtime or network.
 
 electron-builder copies the matching `runtime/<arch>` into
 `Contents/Resources/runtime/<arch>` (outside ASAR) and produces per-architecture
-`.zip` artifacts (`imapSyncGUI-<version>-mac-<arch>.zip`). A packaged build
-resolves and launches only that bundled runtime. The packaged-runtime smoke
-test (`pnpm package:smoke`) exercises the same resolution path offline, from
-inside the packaged `.app`, in a host-isolation environment.
+`.dmg` and `.zip` artifacts (`imapSyncGUI-<version>-mac-<arch>.dmg` /
+`.zip`). The `.app` bundle is ad-hoc signed (ADR-015); the bundled runtime
+binary is excluded from the seal via `signIgnore` because the official x86_64
+binary cannot be re-signed and the arm64 binary is already linker-signed. A
+packaged build resolves and launches only that bundled runtime. The
+packaged-runtime smoke test (`pnpm package:smoke`) exercises the same resolution
+path offline, from inside the packaged `.app`, in a host-isolation environment.
 
 ## Status and known limitations
 

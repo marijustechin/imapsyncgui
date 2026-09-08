@@ -21,8 +21,9 @@ Native runtime verification is separate and **not** part of `pnpm verify`
 - `pnpm runtime:self-test` — offline self-test of the bundled binary in a
   host-isolation environment (restricted `PATH`, cleared Perl variables).
 - `pnpm package:mac:x64` / `pnpm package:mac:arm64` — build the distributable
-  `.app` + `.zip` for one architecture.
-- `pnpm package:smoke` — packaged-runtime smoke test against the built `.app`.
+  `.app` + `.dmg` + `.zip` for one architecture (ad-hoc signed, ADR-015).
+- `pnpm package:smoke` — packaged-runtime smoke test against the built `.app`;
+  accepts `--app <path>` to test an app copied from a mounted DMG.
 
 See `docs/runtime.md`.
 
@@ -38,7 +39,13 @@ executed; see ADR-014.
 ## Coverage (packaging)
 
 - `src/main/packaging.test.ts` verifies bundle identity, that only `x64`/`arm64`
-  are supported (no universal build), and deterministic artifact naming.
+  are supported (no universal build), deterministic artifact naming, DMG+ZIP
+  targets, and the ad-hoc signing identity.
+- `src/main/electron-builder-config.test.ts` reads the actual
+  `electron-builder.config.cjs` and asserts the DMG/ZIP targets, ad-hoc signing
+  (`identity: '-'`, `hardenedRuntime: false`), architecture-bearing artifact
+  names, the conventional DMG layout with an `/Applications` link, and the
+  per-architecture `extraResources` mapping.
 
 ## Conventions
 
