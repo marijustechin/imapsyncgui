@@ -324,3 +324,48 @@ and an interactive session, none available in the agent environment.
 Published: a downloadable GitHub pre-release `v0.1.0-e2e.1` with both artifacts
 and a `SHA256SUMS.txt`; both artifacts were re-downloaded from the release and
 their checksums verified.
+
+## 2026-09-08 — TASK-010B
+
+Status: Complete (diagnosis + corrected DMG distribution; TASK-010 remains
+incomplete)
+
+Implemented:
+
+- investigated the first real-mac distribution failure as an incident, not an
+  assumption: re-downloaded `v0.1.0-e2e.1` ZIPs from GitHub and proved both
+  structurally valid with native tooling (`unzip -t`, `zipinfo`, `ditto`);
+- verified per-architecture identity (x64 app+runtime = x86_64, arm64
+  app+runtime = arm64);
+- identified the likely root cause with evidence: the arm64 `.app` was only
+  linker-signed (no `_CodeSignature/CodeResources`, no sealed resources), which
+  Gatekeeper on Apple Silicon rejects as "damaged" (`spctl`:
+  "code has no resources but signature indicates they must be present");
+- switched electron-builder to ad-hoc signing (`identity: '-'`,
+  `hardenedRuntime: false`, ADR-015) and DMG distribution (DMG + ZIP, with an
+  `/Applications` link), excluding the PAR::Packer runtime binary via
+  `signIgnore`;
+- extended native arm64 CI to build/verify/mount/inspect the DMG and smoke-test
+  the app copied from it;
+- produced, validated, and published a new immutable pre-release
+  `v0.1.0-e2e.2` with architecture-specific DMGs + `SHA256SUMS.txt`;
+- re-downloaded the public DMGs and independently verified checksums,
+  `hdiutil verify`, and `hdiutil attach`.
+
+Verification:
+
+- pnpm verify: PASS (192 tests)
+- x86_64 DMG: `hdiutil verify` PASS, mounts, app copy passes packaged smoke,
+  launches, ad-hoc signature verifies
+- arm64 DMG: native arm64 CI PASS (verify/mount/copy/smoke/launch)
+- GitHub-downloaded DMGs: checksum PASS, `hdiutil verify` PASS
+
+Decisions:
+
+- ADR-015: ad-hoc signing of distributable bundles (no Developer ID)
+
+Honest status:
+
+- root cause of the Ventura failure strongly indicated but not provable (the
+  machine architecture was never recorded);
+- TASK-010 remains incomplete pending another physical clean-machine E2E run.

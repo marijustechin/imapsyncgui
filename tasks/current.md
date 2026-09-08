@@ -478,15 +478,22 @@ Blocked — requires manual clean-machine testing with real test mailboxes.
 
 Done (automated/package verification):
 
-- `pnpm verify` passes (183 tests).
-- The actual distribution artifacts were produced and recorded with SHA-256
-  (see `docs/e2e-macos.md`):
-  - x86_64 `imapSyncGUI-0.1.0-mac-x64.zip` (rebuilt with the latest code);
-  - arm64 `imapSyncGUI-0.1.0-mac-arm64.zip` (downloaded from native CI).
-- Packaged runtime smoke tests pass for x86_64 (local) and arm64 (native CI);
-  the native arm64 workflow passes end to end.
-- `docs/e2e-macos.md` documents the artifact details, signing/notarization
-  limitation, and the remaining manual steps.
+- `pnpm verify` passes (192 tests).
+- A first real-mac test distribution (`v0.1.0-e2e.1`, ZIPs) failed on a Ventura
+  machine and succeeded on the developer's x86_64 Hackintosh; the failure was
+  investigated in TASK-010B (see `docs/e2e-macos.md` and ADR-015).
+- A corrected distribution (`v0.1.0-e2e.2`) now ships ad-hoc-signed,
+  architecture-specific **DMGs** with `SHA256SUMS.txt`:
+  - x86_64 `imapSyncGUI-0.1.0-mac-x64.dmg`
+    (`c8a1cc4d978a6c36324326c95faa103a3f7a76d3e046cbc685d35c4ebddd2ff9`);
+  - arm64 `imapSyncGUI-0.1.0-mac-arm64.dmg`
+    (`d956b55a13184f83e39cb20a3417abf80e29ead3203991baec1e23f2aa219f9f`).
+- Both DMGs pass `hdiutil verify`/`hdiutil attach` and packaged smoke tests;
+  the arm64 DMG is verified by native arm64 CI; both public DMGs were
+  re-downloaded from GitHub and independently checksum-verified.
+- `docs/e2e-macos.md` records the incident investigation, the two real test
+  attempts, the architecture-selection guidance, and a pre-test architecture
+  checklist that must be filled in before the next launch attempt.
 
 Remaining blocker (cannot be performed by the agent environment):
 
