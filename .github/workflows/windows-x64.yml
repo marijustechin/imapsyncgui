@@ -104,9 +104,10 @@ jobs:
           $bytes = [System.IO.File]::ReadAllBytes($installer.FullName)
           if ($bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw "installer is not a PE executable" }
           $peOffset = [BitConverter]::ToInt32($bytes, 0x3C)
+          if ($bytes[$peOffset] -ne 0x50 -or $bytes[$peOffset + 1] -ne 0x45) { throw "installer is missing PE signature" }
           $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
           Write-Output "installer PE machine: 0x$($machine.ToString('x4'))"
-          if ($machine -ne 0x8664) { throw "installer is not AMD64" }
+          Write-Output "note: an NSIS installer stub is 32-bit (0x014c) by design; the x64 app/runtime it installs are verified in the next steps"
 
       - name: Silent install into disposable location
         shell: pwsh
@@ -131,6 +132,23 @@ jobs:
           $runtimeExe = "$env:INSTALL_DIR/resources/runtime/win32-x64/bin/imapsync.exe"
           if (-not (Test-Path $runtimeExe)) { throw "installed runtime imapsync.exe missing" }
           Write-Output "installed runtime present: $runtimeExe"
+
+          function Get-PEMachine([string]$path) {
+            $bytes = [System.IO.File]::ReadAllBytes($path)
+            if ($bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw "$path is not a PE executable" }
+            $peOffset = [BitConverter]::ToInt32($bytes, 0x3C)
+            if ($bytes[$peOffset] -ne 0x50 -or $bytes[$peOffset + 1] -ne 0x45) { throw "$path is missing PE signature" }
+            return [BitConverter]::ToUInt16($bytes, $peOffset + 4)
+          }
+
+          $appExe = "$env:INSTALL_DIR/imapSyncGUI.exe"
+          $appMachine = Get-PEMachine $appExe
+          Write-Output "installed application PE machine: 0x$($appMachine.ToString('x4'))"
+          if ($appMachine -ne 0x8664) { throw "installed imapSyncGUI.exe is not AMD64 (x64)" }
+
+          $runtimeMachine = Get-PEMachine $runtimeExe
+          Write-Output "installed runtime PE machine: 0x$($runtimeMachine.ToString('x4'))"
+          if ($runtimeMachine -ne 0x8664) { throw "installed imapsync.exe is not AMD64 (x64)" }
 
       - name: Smoke test installed application runtime
         shell: pwsh
