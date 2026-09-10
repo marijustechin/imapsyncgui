@@ -369,3 +369,61 @@ Honest status:
 - root cause of the Ventura failure strongly indicated but not provable (the
   machine architecture was never recorded);
 - TASK-010 remains incomplete pending another physical clean-machine E2E run.
+
+## 2026-09-10 — TASK-011
+
+Status: Complete
+
+Implemented:
+
+- Windows x64 as a first-class platform (not a cross-compile shortcut): the
+  runtime matrix is now `darwin-x64` / `darwin-arm64` / `win32-x64`, with the
+  platform-specific executable name (`imapsync` vs `imapsync.exe`);
+- self-contained Windows x64 runtime via the official upstream `imapsync.exe`
+  from the free `imapsync_2.314.zip` (ADR-016), staged/verified by SHA-256;
+- extended the runtime manifest/provenance model with `platform`,
+  `artifactFilename`, and `artifactSha256` (validated, not merely printed);
+- Windows packaging: a single NSIS installer (`electron-builder --win --x64`),
+  per-user assisted install (no elevation), `imapSyncGUI-<version>-windows-x64-setup.exe`;
+- runtime build/validate/self-test/smoke scripts extended for `win32-x64`,
+  including a dependency-free PE-header (AMD64) check;
+- native Windows CI (`.github/workflows/windows-x64.yml`): host assertion
+  (`win32` + `x64`), `pnpm verify`, runtime build/validate (native .NET PE
+  check)/self-test (host isolation), NSIS packaging, packaged smoke test,
+  silent install + installed AMD64 verification + installed smoke + uninstall,
+  metadata/SHA-256 recording, artifact upload;
+- documentation: ADR-016/ADR-017, `docs/e2e-windows.md`, and updates to
+  architecture/security/runtime/testing/third-party-licenses/product/README.
+
+Verification:
+
+- `pnpm verify`: PASS (221 tests) locally and on native Windows x64;
+- macOS arm64 native CI: PASS (no regression);
+- native Windows x64 CI: PASS — runtime `imapsync.exe` PE machine `0x8664`
+  (AMD64), self-test + packaged smoke (`imapsync 2.314` starts) in host
+  isolation, installer silently installs and uninstalls, installed app +
+  runtime verified AMD64;
+- installer: `imapSyncGUI-0.1.0-windows-x64-setup.exe`, SHA-256
+  `770a7c72108f8b6fec27c9d9e947e6c293bae0b0d3b58d060b370fe798103fd8`.
+
+Decisions:
+
+- ADR-016: Windows runtime via the official self-contained `imapsync.exe`.
+- ADR-017: Windows artifacts unsigned (SmartScreen documented honestly).
+
+Published:
+
+- GitHub pre-release `v0.1.0-e2e.3` (Windows-specific, so the previously proven
+  macOS assets in `v0.1.0-e2e.2` are not silently replaced) with the installer
+  and `SHA256SUMS.txt`; the public installer was re-downloaded and its SHA-256
+  verified against the recorded value.
+
+Honest status:
+
+- The installer is **unsigned** (no Authenticode); SmartScreen is expected to
+  warn — this is documented, not worked around.
+- A physical clean-machine Windows E2E test has **not** been performed; native
+  CI + packaged/installed verification is complete, and `docs/e2e-windows.md`
+  records the remaining manual checklist. Windows is **not** described as
+  clean-machine verified.
+- TASK-010 remains incomplete (paused) pending manual physical macOS E2E.

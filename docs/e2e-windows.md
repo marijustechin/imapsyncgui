@@ -44,9 +44,23 @@ This is **not** a substitute for a physical clean-machine run; see below.
 
 ## Distribution
 
-See the current GitHub pre-release for the Windows x64 installer artifact and
-its `SHA256SUMS` entry. The installer filename is
-`imapSyncGUI-<version>-windows-x64-setup.exe`.
+Current Windows test distribution is a GitHub pre-release:
+
+- Release tag: `v0.1.0-e2e.3`
+- Title: `imapSyncGUI v0.1.0 — Windows x64 test build (unsigned)`
+- URL: https://github.com/marijustechin/imapsyncgui/releases/tag/v0.1.0-e2e.3
+- Installer: `imapSyncGUI-0.1.0-windows-x64-setup.exe`
+- Installer SHA-256:
+  `770a7c72108f8b6fec27c9d9e947e6c293bae0b0d3b58d060b370fe798103fd8`
+- Bundled `imapsync.exe` SHA-256:
+  `329c0bfecab410a2bf5e57cc3319aa00b8e494fd792fe3a5476db9efdb1d2aab`
+- Produced from commit `e84c5cd46d3c6adcc8c7531af95515299514c6eb`.
+
+The public installer was re-downloaded from the release and its SHA-256 verified
+against the recorded value; it is a valid PE executable (a Nullsoft NSIS
+installer, whose 32-bit stub is normal and expected). The identical bytes were
+silently installed, smoke-tested (installed `imapsync.exe` = AMD64), and
+uninstalled in native Windows x64 CI.
 
 ## Manual clean-machine checklist
 

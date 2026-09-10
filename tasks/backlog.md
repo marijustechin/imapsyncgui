@@ -4,12 +4,15 @@
 
 - TASK-010 — End-to-end verification on clean macOS environment
 - Apple code signing and notarization
+- Physical clean-machine Windows E2E test (TASK-011 follow-up; see
+  `docs/e2e-windows.md`)
+- Windows Authenticode code signing (currently unsigned, SmartScreen warns;
+  see ADR-017)
 
 ## Later
 
 - Batch mailbox migrations
 - Saved server presets without passwords
-- Windows support
 - Linux support
 - Application auto-update
 - Stronger credential handling via `--passfile` temp files (see ADR-007)
