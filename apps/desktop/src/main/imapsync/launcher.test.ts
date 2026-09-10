@@ -64,4 +64,22 @@ describe('createNodeProcessLauncher', () => {
 
     expect(child.kill).toHaveBeenCalledWith('SIGTERM')
   })
+
+  it('forwards stdout and stderr data events incrementally', () => {
+    const child = createFakeChild()
+    spawnMock.mockReturnValue(child)
+
+    const process = createNodeProcessLauncher()({ executable: 'imapsync', args: [] })
+    const stdout: string[] = []
+    const stderr: string[] = []
+    process.onData((chunk) => stdout.push(chunk.toString()), 'stdout')
+    process.onData((chunk) => stderr.push(chunk.toString()), 'stderr')
+
+    child.stdout.emit('data', Buffer.from('first\n'))
+    child.stderr.emit('data', Buffer.from('warn\n'))
+    child.stdout.emit('data', Buffer.from('second\n'))
+
+    expect(stdout).toEqual(['first\n', 'second\n'])
+    expect(stderr).toEqual(['warn\n'])
+  })
 })

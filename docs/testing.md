@@ -69,7 +69,17 @@ ADR-017.
   (`identity: '-'`, `hardenedRuntime: false`), architecture-bearing artifact
   names, the conventional DMG layout with an `/Applications` link, the
   per-architecture `extraResources` mapping, and the Windows NSIS/`nsis`
-  configuration (per-user assisted installer, `win32-x64` runtime).
+  configuration (per-user assisted installer, `win32-x64` runtime). It also
+  asserts that a CLI target conflicting with an explicit `TARGET_PLATFORM` is
+  rejected.
+- `src/main/electron-builder-runtime.test.ts` covers the packaging
+  runtime-selection logic (`electron-builder-runtime.cjs`): CLI platform/arch
+  flag detection, the platform/arch → runtime-directory mapping, native
+  Windows/macOS selection (`win32-x64`, `darwin-x64`, `darwin-arm64`), rejection
+  of unsupported combinations (e.g. `win32/arm64`, `linux/x64`), fail-fast
+  rejection of implicit cross-host packaging (`--win` on macOS), explicit
+  `TARGET_PLATFORM` overrides, and CLI-vs-`TARGET_PLATFORM`/`TARGET_ARCH`
+  conflicts.
 
 ## Conventions
 
@@ -91,12 +101,18 @@ ADR-017.
   generation and that malicious values cannot become flags.
 - `src/main/imapsync/sanitize.test.ts` covers credential redaction.
 - `src/main/imapsync/launcher.test.ts` verifies `spawn` is called with an
-  argument array and no shell.
+  argument array and no shell, and that stdout/stderr `data` events are
+  forwarded incrementally to the registered listeners.
 - `src/main/imapsync/adapter.test.ts` covers the process lifecycle (success,
   non-zero exit, startup failure), incremental stdout/stderr streaming,
-  cancellation, repeated cancellation, rejection of concurrent migrations, and
+  reassembly of multi-byte UTF-8 characters split across chunks, cancellation,
+  repeated cancellation, rejection of concurrent migrations, and
   that credentials travel via environment rather than arguments and are
   redacted from output.
+- `src/main/imapsync/streaming.test.ts` spawns a real child process (a small
+  Node script) through the real launcher and adapter and asserts that the first
+  chunk of output is delivered while the process is still running, proving the
+  spawn/pipe path is incremental rather than buffered until exit.
 - `src/main/imapsync/lifecycle.test.ts` covers the runtime-result → lifecycle
   event mapping and that no `Error` object crosses the boundary.
 - `src/main/runtime/arch.test.ts`, `errors.test.ts`, `manifest.test.ts`,
@@ -141,10 +157,16 @@ ADR-017.
   incremental output appending and ordering, single output/lifecycle
   subscription, terminal transition driven by the lifecycle event (not output
   text), subscription cleanup, cancellation and duplicate-cancel prevention,
-  cancellation-failure handling, and form replacement while active. It further
+  cancellation-failure handling, cancelling during the `starting` phase, and
+  form replacement while active. It further
   covers the distinct success/failure/cancelled result UX, safe identities,
   raw-error/credential exclusion, and the return-to-form flow that clears state
   and requires fresh connection tests.
+- `src/renderer/src/MigrationView.test.tsx` covers the migration view directly:
+  the live running indicator and `Waiting for imapsync output…` placeholder,
+  the starting/running/cancelling states, the preserved log once output
+  arrives, distinct success/failure/cancelled results, the failure and cancel
+  error alerts, and the start-another action.
 
 Runtime, connection, and renderer tests use injected fakes or a mocked preload
 API and never require a real `imapsync` install or live IMAP servers.

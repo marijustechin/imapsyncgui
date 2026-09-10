@@ -141,6 +141,20 @@ describe('MigrationAdapter', () => {
     expect(h.outputs).toEqual([{ stream: 'stderr', text: 'warning: something\n' }])
   })
 
+  it('reassembles multi-byte UTF-8 characters split across chunks', async () => {
+    const h = createHarness()
+
+    const startPromise = h.adapter.start(input)
+    h.fake.emitSpawn()
+    await startPromise
+
+    const bytes = Buffer.from('café ✓', 'utf8')
+    h.fake.emitStdout(bytes.subarray(0, 4))
+    h.fake.emitStdout(bytes.subarray(4))
+
+    expect(h.outputs.map((output) => output.text).join('')).toBe('café ✓')
+  })
+
   it('cancels the running process and emits a cancelled result', async () => {
     const h = createHarness()
 

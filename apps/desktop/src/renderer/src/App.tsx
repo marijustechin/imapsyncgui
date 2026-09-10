@@ -38,6 +38,7 @@ type Side = 'source' | 'destination'
 
 function isMigrationViewPhase(phase: MigrationState['phase']): phase is MigrationViewPhase {
   return (
+    phase === 'starting' ||
     phase === 'running' ||
     phase === 'cancelling' ||
     phase === 'succeeded' ||
@@ -172,7 +173,7 @@ function App() {
 
     if (result.ok) {
       if (!terminalRef.current) {
-        setMigration({ phase: 'running' })
+        setMigration((prev) => (prev.phase === 'starting' ? { phase: 'running' } : prev))
       }
     } else {
       cleanupSubscription()
@@ -181,14 +182,15 @@ function App() {
   }
 
   async function handleCancel(): Promise<void> {
-    if (migration.phase !== 'running') {
+    if (migration.phase !== 'running' && migration.phase !== 'starting') {
       return
     }
+    const previousPhase = migration.phase
     setMigration({ phase: 'cancelling' })
     const result = await window.api.cancelMigration()
     if (!result.ok) {
       setCancelError('Could not cancel the migration. Please try again.')
-      setMigration((prev) => (prev.phase === 'cancelling' ? { phase: 'running' } : prev))
+      setMigration((prev) => (prev.phase === 'cancelling' ? { phase: previousPhase } : prev))
     }
   }
 

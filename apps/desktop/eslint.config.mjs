@@ -4,7 +4,7 @@ import reactHooks from 'eslint-plugin-react-hooks'
 
 export default tseslint.config(
   {
-    ignores: ['out/**', 'dist/**', 'node_modules/**', 'scripts/**', 'runtime/**', 'release/**', 'electron-builder.config.cjs'],
+    ignores: ['out/**', 'dist/**', 'node_modules/**', 'scripts/**', 'runtime/**', 'release/**', 'electron-builder.config.cjs', 'electron-builder-runtime.cjs'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

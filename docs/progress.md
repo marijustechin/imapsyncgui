@@ -427,3 +427,74 @@ Honest status:
   records the remaining manual checklist. Windows is **not** described as
   clean-machine verified.
 - TASK-010 remains incomplete (paused) pending manual physical macOS E2E.
+
+## 2026-09-10 — TASK-012
+
+Status: Complete
+
+Implemented:
+
+- migration UX and live log streaming hardening for the packaged app;
+- incremental stdout/stderr streaming now decodes each pipe with a Node
+  `StringDecoder`, so multi-byte UTF-8 characters split across OS reads are
+  reassembled instead of being emitted as replacement characters (the full log
+  is still forwarded chunk-by-chunk, never accumulated until exit);
+- the renderer shows the migration view immediately, including the `starting`
+  phase, with an animated running indicator and a `Waiting for imapsync output…`
+  placeholder until the first chunk arrives; cancel is available during both
+  `starting` and `running`;
+- the default window is now 1080×720 with `minWidth`/`minHeight` bounds, and
+  the form spacing is compacted so the initial form fits a 1366×768 desktop
+  without page-level scrollbars; the migration output panel grows and scrolls
+  internally;
+- tests: launcher data-forwarding, adapter split multi-byte UTF-8 reassembly,
+  a dedicated `MigrationView` suite, and an App test for cancelling during the
+  `starting` phase.
+
+Verification:
+
+- `pnpm verify`: PASS (234 tests);
+- packaged macOS x64 app rebuilt and re-tested end to end with a local IMAP
+  fixture and the real bundled `imapsync`: output appears while the status is
+  still `Migration running` (0 → 1899 → 11503 → 12314 chars) rather than only
+  after exit; the running indicator and placeholder show before the first
+  output; cancellation stops the process, preserves the partial log, and shows
+  the `cancelled` result;
+- initial packaged form measured with no page-level vertical scrollbar at the
+  default window size.
+
+Root cause note:
+
+- The Node/launcher/IPC streaming path was already incremental; the reproduced
+  UX gaps were the lack of any visible activity indication during imapsync's
+  startup/quiet periods and the initial form overflow. The streaming path was
+  additionally hardened for multi-byte chunk boundaries. A direct investigation
+  (see `tasks/done/TASK-012.md`) found no output accumulation in the main
+  process.
+
+## 2026-09-10 — TASK-013
+
+Status: Complete
+
+Implemented:
+
+- hardened electron-builder runtime selection so the bundled runtime is derived
+  from the packaging target, never the build host;
+- new `apps/desktop/electron-builder-runtime.cjs` helper detects the target
+  platform/architecture from CLI flags, maps it to `win32-x64` /
+  `darwin-x64` / `darwin-arm64`, and rejects implicit cross-host packaging
+  (e.g. `--win` on macOS) with a clear error before packaging;
+- `TARGET_PLATFORM`/`TARGET_ARCH` remain explicit overrides, and a CLI flag
+  that conflicts with them is rejected;
+- tests for the selection/rejection logic plus a config-level conflict test;
+- updated `docs/architecture.md` and `docs/testing.md`.
+
+Verification:
+
+- `pnpm verify`: PASS (25 test files, 251 tests);
+- `electron-builder --win --x64` on macOS now exits non-zero with a clear
+  `refusing cross-host packaging` error;
+- explicit `TARGET_PLATFORM=win32` resolves the `win32-x64` runtime;
+- native Windows/macOS CI packaging commands are unchanged.
+
+Note: no application runtime behaviour changed; no commit or push performed.

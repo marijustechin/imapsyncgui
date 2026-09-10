@@ -2,9 +2,11 @@
 
 > **Status: Active — awaiting manual physical macOS E2E.**
 >
-> This is the single active task. TASK-011 (Windows x64 support) is Complete and
-> archived in `tasks/done/TASK-011.md`. TASK-010 remains **not** Complete pending
-> a real clean-machine macOS E2E run with controlled test mailboxes.
+> This is the single active task. TASK-011 (Windows x64 support), TASK-012
+> (migration UX + live log streaming), and TASK-013 (Windows packaging runtime
+> hardening) are Complete and archived in `tasks/done/`. TASK-010 remains **not**
+> Complete pending a real clean-machine macOS E2E run with controlled test
+> mailboxes.
 
 ## Goal
 

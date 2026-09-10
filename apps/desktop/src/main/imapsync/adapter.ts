@@ -1,3 +1,4 @@
+import { StringDecoder } from 'node:string_decoder'
 import type { MigrationCancelResult, MigrationInput, MigrationStartResult } from '../../shared/contracts'
 import { buildRuntimeEnvironment } from '../runtime/env'
 import { buildMigrationArgs } from './arguments'
@@ -121,9 +122,19 @@ export class MigrationAdapter {
         resolve({ ok: true, message: 'Migration started.' })
       })
 
-      process.onData((chunk) => this.handleData('stdout', chunk, sanitize), 'stdout')
-      process.onData((chunk) => this.handleData('stderr', chunk, sanitize), 'stderr')
-      process.onExit((code, signal) => this.handleExit(code, signal))
+      // Decode incrementally, retaining any trailing partial UTF-8 sequence
+      // until the next chunk. Output is forwarded to the renderer as soon as
+      // each decoded chunk is available, never accumulated until exit.
+      const stdoutDecoder = new StringDecoder('utf8')
+      const stderrDecoder = new StringDecoder('utf8')
+
+      process.onData((chunk) => this.handleData('stdout', stdoutDecoder.write(chunk), sanitize), 'stdout')
+      process.onData((chunk) => this.handleData('stderr', stderrDecoder.write(chunk), sanitize), 'stderr')
+      process.onExit((code, signal) => {
+        this.handleData('stdout', stdoutDecoder.end(), sanitize)
+        this.handleData('stderr', stderrDecoder.end(), sanitize)
+        this.handleExit(code, signal)
+      })
     })
   }
 
@@ -145,10 +156,10 @@ export class MigrationAdapter {
     return this.phase
   }
 
-  private handleData(stream: 'stdout' | 'stderr', chunk: Buffer, sanitize: (text: string) => string): void {
-    const text = sanitize(chunk.toString('utf8'))
-    if (text.length > 0) {
-      this.onOutput?.({ stream, text })
+  private handleData(stream: 'stdout' | 'stderr', text: string, sanitize: (text: string) => string): void {
+    const sanitized = sanitize(text)
+    if (sanitized.length > 0) {
+      this.onOutput?.({ stream, text: sanitized })
     }
   }
 

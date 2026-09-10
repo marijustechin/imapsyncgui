@@ -71,6 +71,17 @@ The privileged runtime lives in `apps/desktop/src/main/imapsync/` and wraps the
   process lifecycle (`starting`, `running`, `succeeded`, `failed`, `cancelled`)
   and emits sanitized output incrementally.
 
+### Incremental output streaming
+
+Output is never accumulated until the process exits. The launcher attaches
+`data` listeners to both the child `stdout` and `stderr` pipes, and the adapter
+forwards each chunk to the `onOutput` callback as soon as it arrives. Each stream
+is decoded with a Node `StringDecoder`, so a multi-byte UTF-8 character split
+across two OS reads is reassembled instead of being emitted as replacement
+characters; any trailing partial sequence is flushed when the process exits.
+Credentials are redacted per chunk before the chunk leaves the main process, and
+the child's actual invocation arguments are unchanged.
+
 The adapter is constructed in the main process with a real process launcher and
 an `onOutput` callback that broadcasts sanitized lines to the renderer over the
 `migration:output` channel. The launcher is injected so the adapter can be
@@ -112,10 +123,24 @@ sanitized environment.
 ## Distribution packaging
 
 electron-builder (`electron-builder.config.cjs`) produces the distributable
-artifacts. The config derives the runtime directory from the build host
-platform (`process.platform` by default, overridable via `TARGET_PLATFORM`) and
-`TARGET_ARCH`, so packaging is native (a Windows build must run on Windows; no
-cross-compilation shortcut).
+artifacts. The bundled runtime is selected from the **packaging target**, never
+the build host. `electron-builder-runtime.cjs` derives the target platform and
+architecture from the electron-builder CLI flags (`--win`/`--mac`,
+`--x64`/`--arm64`) and validates them against `process.platform`:
+
+- native packaging (`--win` on Windows, `--mac` on macOS) bundles the matching
+  runtime (`win32-x64` / `darwin-x64` / `darwin-arm64`);
+- an **implicit cross-host build** (for example `--win` on macOS) fails fast
+  with a clear error instead of silently bundling the host runtime;
+- `TARGET_PLATFORM` / `TARGET_ARCH` remain explicit overrides (used by tests and
+  deliberate cross-packaging), and a value that conflicts with a CLI flag is
+  rejected.
+
+This keeps packaging native (a Windows build must run on Windows; no
+cross-compilation shortcut) and guarantees a Windows package can never contain a
+host runtime such as `darwin-x64` through an implicit default. The native
+Windows and macOS release paths (which pass the matching platform/architecture
+flags) are unaffected.
 
 macOS:
 
@@ -273,11 +298,27 @@ endpoints are valid and have a current successful test.
 ### Active migration lifecycle
 
 On a successful start the renderer replaces the form with the active migration
-view. Migration state is
+view immediately — including the `starting` phase — so the log panel and status
+are visible before the first byte of output arrives. Migration state is
 `idle → starting → running → (cancelling) → succeeded | failed | cancelled`,
 where the terminal transition is driven by the narrow `migration:lifecycle`
 event emitted from the main process — never by parsing output text. Output
 arrives through the `migration:output` channel and is appended incrementally.
+
+While a migration is active, `MigrationView` shows an animated running
+indicator and, until the first output arrives, a `Waiting for imapsync output…`
+placeholder, so the user can distinguish an active migration from a stalled one
+even when imapsync temporarily produces no output. Cancel is available during
+both `starting` and `running`.
+
+### Window sizing and layout
+
+The default `BrowserWindow` is sized to fit the migration form on a typical
+1366×768 desktop without page-level scrollbars, and declares sensible
+`minWidth`/`minHeight` bounds so the form stays usable (and remains responsive)
+on genuinely smaller windows. The form uses compact spacing rather than hiding
+overflow, and the active migration view lets the output panel grow and scroll
+internally instead of scrolling the whole page.
 
 Output/lifecycle listeners are registered **before** `startMigration()` is
 invoked, so an immediately-terminating process cannot be missed; listeners are

@@ -1,27 +1,23 @@
-// TARGET_PLATFORM defaults to the build host platform so packaging is native
-// (no cross-compilation shortcut): a Windows build must run on Windows, and a
-// macOS build must run on macOS. It is overridable (e.g. in tests).
-const targetPlatform = process.env.TARGET_PLATFORM || process.platform
-const targetArch = process.env.TARGET_ARCH || 'x64'
+// Packaging bundles the runtime that matches the *target* platform, never the
+// build host. Native packaging is required (ADR-016/017): a Windows build must
+// run on Windows, and a macOS build must run on macOS. The target is derived
+// from the electron-builder CLI flags (e.g. `--win`) and validated against the
+// host; an implicit cross-host build fails fast instead of silently bundling
+// the host runtime. TARGET_PLATFORM remains an explicit override (used by tests
+// and deliberate cross-packaging). See electron-builder-runtime.cjs.
+const { resolvePackagingTarget } = require('./electron-builder-runtime.cjs')
 
-function runtimeArchFor(platform, arch) {
-  if (platform === 'darwin') {
-    if (arch === 'arm64') return 'darwin-arm64'
-    if (arch === 'x64') return 'darwin-x64'
-    return null
-  }
-  if (platform === 'win32') {
-    if (arch === 'x64') return 'win32-x64'
-    return null
-  }
-  return null
+const resolvedTarget = resolvePackagingTarget({
+  env: process.env,
+  argv: process.argv,
+  hostPlatform: process.platform,
+})
+
+if (!resolvedTarget.ok) {
+  throw new Error(resolvedTarget.error)
 }
 
-const runtimeArch = runtimeArchFor(targetPlatform, targetArch)
-
-if (runtimeArch === null) {
-  throw new Error(`unsupported target platform/arch: ${targetPlatform}/${targetArch}`)
-}
+const { runtimeArch } = resolvedTarget
 
 module.exports = {
   appId: 'com.imapsyncgui.desktop',

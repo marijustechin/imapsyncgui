@@ -287,6 +287,26 @@ describe('App active migration', () => {
     expect(screen.getByRole('button', { name: 'Cancel migration' })).toBeDefined()
   })
 
+  it('shows the migration view while starting and allows cancelling', async () => {
+    let resolveStart: (value: unknown) => void = () => {}
+    startMigrationMock.mockImplementation(() => new Promise((resolve) => {
+      resolveStart = resolve
+    }))
+    render(<App />)
+    await fillAndTestBoth()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start migration' }))
+
+    expect(await screen.findByText('Starting migration…')).toBeDefined()
+    expect(screen.getByRole('log')).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel migration' }))
+    expect(cancelMigrationMock).toHaveBeenCalledTimes(1)
+
+    resolveStart({ ok: true, message: 'Migration started.' })
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Cancelling…'))
+  })
+
   it('passes the current endpoint values to startMigration', async () => {
     render(<App />)
     await beginMigration()

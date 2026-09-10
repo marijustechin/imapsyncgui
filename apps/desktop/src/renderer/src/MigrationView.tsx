@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 
-export type MigrationViewPhase = 'running' | 'cancelling' | 'succeeded' | 'failed' | 'cancelled'
+export type MigrationViewPhase = 'starting' | 'running' | 'cancelling' | 'succeeded' | 'failed' | 'cancelled'
 
 interface MigrationViewProps {
   phase: MigrationViewPhase
@@ -14,6 +14,7 @@ interface MigrationViewProps {
 }
 
 const STATUS_TEXT: Record<MigrationViewPhase, string> = {
+  starting: 'Starting migration…',
   running: 'Migration running',
   cancelling: 'Cancelling…',
   succeeded: 'Migration completed successfully.',
@@ -35,6 +36,7 @@ export function MigrationView({
   const stickToBottomRef = useRef(true)
 
   const terminal = phase === 'succeeded' || phase === 'failed' || phase === 'cancelled'
+  const active = !terminal
 
   useEffect(() => {
     const element = outputRef.current
@@ -55,9 +57,12 @@ export function MigrationView({
   return (
     <section className="migration" aria-label="Migration">
       <header className="migration-header">
-        <h2 className={`migration-status status-${phase}`} role="status">
-          {STATUS_TEXT[phase]}
-        </h2>
+        <div className="migration-status-row">
+          {active ? <span className="spinner" aria-hidden="true" /> : null}
+          <h2 className={`migration-status status-${phase}`} role="status">
+            {STATUS_TEXT[phase]}
+          </h2>
+        </div>
         {phase === 'failed' && failureMessage ? (
           <p className="status status-failure" role="alert">
             {failureMessage}
@@ -91,15 +96,20 @@ export function MigrationView({
         </p>
       ) : null}
 
-      <pre
-        ref={outputRef}
-        className="output"
-        role="log"
-        aria-label="Migration output"
-        onScroll={handleScroll}
-      >
-        {output}
-      </pre>
+      <div className="output-container">
+        <pre
+          ref={outputRef}
+          className="output"
+          role="log"
+          aria-label="Migration output"
+          onScroll={handleScroll}
+        >
+          {output}
+        </pre>
+        {output.length === 0 && active ? (
+          <p className="output-placeholder">Waiting for imapsync output…</p>
+        ) : null}
+      </div>
     </section>
   )
 }

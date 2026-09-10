@@ -25,8 +25,10 @@ const nodeRuntimeFs: RuntimeFs = {
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 700,
+    width: 1080,
+    height: 720,
+    minWidth: 640,
+    minHeight: 520,
     show: false,
     title: 'imapSyncGUI',
     webPreferences: {

@@ -127,3 +127,15 @@ describe('electron-builder configuration (Windows)', () => {
     ])
   })
 })
+
+describe('electron-builder configuration (cross-host safety)', () => {
+  it('rejects a CLI target that conflicts with an explicit TARGET_PLATFORM', () => {
+    const previousArgv = process.argv
+    process.argv = [...previousArgv, '--win', '--x64']
+    try {
+      expect(() => loadConfig({ TARGET_PLATFORM: 'darwin', TARGET_ARCH: 'x64' })).toThrow(/conflicting/i)
+    } finally {
+      process.argv = previousArgv
+    }
+  })
+})
