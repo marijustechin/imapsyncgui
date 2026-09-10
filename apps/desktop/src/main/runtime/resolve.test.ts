@@ -33,7 +33,7 @@ describe('resolveRuntime', () => {
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.runtime.mode).toBe('packaged')
-      expect(result.runtime.executable).toBe('/resources/runtime/darwin-x64/bin/imapsync')
+      expect(result.runtime.executable).toMatch(/runtime[/\\]darwin-x64[/\\]bin[/\\]imapsync$/)
       expect(result.runtime.prefixArgs).toEqual([])
       expect(result.runtime.runtimeArch).toBe('darwin-x64')
     }
@@ -43,7 +43,7 @@ describe('resolveRuntime', () => {
     const result = resolveRuntime({ isPackaged: true, platform: 'darwin', arch: 'arm64', env: {}, resourcesPath: '/resources' })
     expect(result.ok).toBe(true)
     if (result.ok) {
-      expect(result.runtime.executable).toBe('/resources/runtime/darwin-arm64/bin/imapsync')
+      expect(result.runtime.executable).toMatch(/runtime[/\\]darwin-arm64[/\\]bin[/\\]imapsync$/)
       expect(result.runtime.prefixArgs).toEqual([])
       expect(result.runtime.runtimeArch).toBe('darwin-arm64')
     }
@@ -71,7 +71,7 @@ describe('resolveRuntime', () => {
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.runtime.mode).toBe('packaged')
-      expect(result.runtime.executable).toBe('/resources/runtime/darwin-x64/bin/imapsync')
+      expect(result.runtime.executable).toMatch(/runtime[/\\]darwin-x64[/\\]bin[/\\]imapsync$/)
     }
   })
 
@@ -110,7 +110,7 @@ describe('resolveRuntime', () => {
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.runtime.mode).toBe('packaged')
-      expect(result.runtime.executable).toBe('/resources/runtime/darwin-arm64/bin/imapsync')
+      expect(result.runtime.executable).toMatch(/runtime[/\\]darwin-arm64[/\\]bin[/\\]imapsync$/)
       expect(result.runtime.runtimeArch).toBe('darwin-arm64')
     }
   })

@@ -30,8 +30,8 @@ const runtimeDir = '/resources/runtime/darwin-x64'
 function completeFs(architecture = 'darwin-x64'): RuntimeFs {
   return makeFs({
     [runtimeDir]: '',
-    [`${runtimeDir}/manifest.json`]: makeManifest(architecture),
-    [`${runtimeDir}/bin/imapsync`]: '',
+    [join(runtimeDir, 'manifest.json')]: makeManifest(architecture),
+    [join(runtimeDir, 'bin', 'imapsync')]: '',
   })
 }
 
@@ -48,7 +48,7 @@ describe('validateRuntime', () => {
   it('reports a missing manifest', () => {
     const fs = makeFs({
       [runtimeDir]: '',
-      [`${runtimeDir}/bin/imapsync`]: '',
+      [join(runtimeDir, 'bin', 'imapsync')]: '',
     })
     expect(validateRuntime(runtimeDir, 'darwin-x64', fs)).toEqual({
       ok: false,
@@ -60,8 +60,8 @@ describe('validateRuntime', () => {
   it('reports a malformed manifest', () => {
     const fs = makeFs({
       [runtimeDir]: '',
-      [`${runtimeDir}/manifest.json`]: '{ nope',
-      [`${runtimeDir}/bin/imapsync`]: '',
+      [join(runtimeDir, 'manifest.json')]: '{ nope',
+      [join(runtimeDir, 'bin', 'imapsync')]: '',
     })
     expect(validateRuntime(runtimeDir, 'darwin-x64', fs)).toEqual({
       ok: false,
@@ -78,7 +78,7 @@ describe('validateRuntime', () => {
   it('reports a missing script', () => {
     const fs = makeFs({
       [runtimeDir]: '',
-      [`${runtimeDir}/manifest.json`]: makeManifest('darwin-x64'),
+      [join(runtimeDir, 'manifest.json')]: makeManifest('darwin-x64'),
     })
     expect(validateRuntime(runtimeDir, 'darwin-x64', fs)).toEqual({
       ok: false,
