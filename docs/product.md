@@ -21,7 +21,8 @@ The user should not need Homebrew, Perl knowledge, or command-line experience.
 
 ## Initial platform
 
-macOS.
+macOS (Intel x86_64 and Apple Silicon arm64), plus Windows x64 (Windows 10/11
+x86_64) as a first-class platform (TASK-011).
 
 Other operating systems are explicitly out of scope for the first release.
 
@@ -58,8 +59,8 @@ The application must:
 - prevent accidental concurrent execution of the same migration;
 - allow cancellation;
 - provide useful error messages;
-- work on a clean supported macOS installation without requiring the user
-  to manually install development dependencies.
+- work on a clean supported macOS or Windows x64 installation without requiring
+  the user to manually install development dependencies.
 
 ## Security requirements
 
@@ -82,8 +83,8 @@ Do not implement:
 - user accounts;
 - telemetry;
 - automatic updates;
-- Windows support;
 - Linux support;
+- Windows ARM64 or 32-bit support;
 - migration history database;
 - multi-user administration;
 - remote migration service;

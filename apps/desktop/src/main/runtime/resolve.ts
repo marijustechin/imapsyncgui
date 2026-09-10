@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { archToRuntimeArch, type RuntimeArch } from './arch'
+import { runtimeArchFor, runtimeExecutableName, type RuntimeArch } from './arch'
 import { messageForRuntimeFailure, type RuntimeFailureCode } from './errors'
 
 export type RuntimeMode = 'development-override' | 'development-path' | 'packaged'
@@ -18,6 +18,7 @@ export type RuntimeResolutionResult =
 
 export interface ResolveOptions {
   isPackaged: boolean
+  platform: NodeJS.Platform
   arch: NodeJS.Architecture
   env: NodeJS.ProcessEnv
   resourcesPath: string
@@ -25,7 +26,7 @@ export interface ResolveOptions {
 
 export function resolveRuntime(options: ResolveOptions): RuntimeResolutionResult {
   if (options.isPackaged) {
-    const arch = archToRuntimeArch(options.arch)
+    const arch = runtimeArchFor(options.platform, options.arch)
     if (arch === null) {
       return {
         ok: false,
@@ -39,7 +40,7 @@ export function resolveRuntime(options: ResolveOptions): RuntimeResolutionResult
       ok: true,
       runtime: {
         mode: 'packaged',
-        executable: join(runtimeDir, 'bin', 'imapsync'),
+        executable: join(runtimeDir, 'bin', runtimeExecutableName(arch)),
         prefixArgs: [],
         runtimeDir,
         runtimeArch: arch,

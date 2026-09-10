@@ -407,3 +407,98 @@ observed x86_64 behavior.
 - The DMG itself is not signed (electron-builder default).
 - No Apple trust/revocation is claimed; the app remains "unidentified
   developer" for Gatekeeper purposes.
+
+## ADR-016 — Windows x64 runtime: the official self-contained `imapsync.exe`
+
+- **Status:** accepted
+- **Date:** 2026-09-10
+
+The Windows x64 `imapsync` runtime is the official upstream standalone
+`imapsync.exe` distributed inside the free `imapsync_2.314.zip` archive, staged
+under `runtime/win32-x64/bin/imapsync.exe` and invoked directly (no shell, no
+separate Perl, no prefix arguments).
+
+### Research evidence
+
+The upstream Windows distribution (`https://imapsync.lamiral.info/`,
+`/dist/`) ships a free `imapsync_2.314.zip` whose contents include:
+
+- `imapsync.exe` — a **PE32+ console executable (x86-64/AMD64)**, ~30.9 MB,
+  "an embedded Perl script with the Perl interpreter itself added and many Perl
+  modules, all glued together in an archive auto-extracted at run time"
+  (`README_Windows.txt`). It needs only write access to the OS temporary
+  directory at run time.
+- `Cook/build_exe.bat` / `Cook/install_modules.bat` — the upstream recipe used
+  to reproduce the binary with Strawberry Perl + `pp` (PAR::Packer), linking the
+  Strawberry `libcrypto-3-x64` / `libssl-3-x64` / `zlib1` DLLs statically.
+
+The staged binary was downloaded from the official dist URL and independently
+verified:
+
+- zip SHA-256: `61972bf94532bf186dd6d6ee54a4c70bb7ab3bdb79f324321cd742fd50953a0c`
+- `imapsync.exe` SHA-256:
+  `329c0bfecab410a2bf5e57cc3319aa00b8e494fd792fe3a5476db9efdb1d2aab`
+- PE machine field `0x8664` (AMD64), verified natively in Windows CI with .NET
+  and by the repository's own dependency-free PE-header check.
+
+### Alternatives considered
+
+- **Self-built PAR::Packer binary on Windows (mirroring ADR-013):** would
+  require Strawberry Perl + the full CPAN module set + `pp` in CI, and would
+  duplicate an artifact the upstream author already publishes. Rejected because
+  an official, freely downloadable, self-contained x64 executable exists.
+- **Strawberry Perl + `imapsync` script bundled as separate files:** requires
+  shipping an entire Perl distribution and matching module tree, and still has
+  a Perl runtime dependency at launch. Rejected.
+- **WSL / Cygwin / MSYS2 / Docker:** rejected — any of these would add an
+  end-user dependency the product explicitly forbids.
+
+### Rationale
+
+This mirrors ADR-012 (the macOS x86_64 official binary): the smallest reliable,
+self-contained, upstream-provided runtime with no end-user dependency beyond
+the OS itself. No Strawberry Perl, no `PATH`-installed `imapsync`, no Perl
+toolchain is required at run time.
+
+### Consequences
+
+- Packaged Windows mode resolves only `<resources>/runtime/win32-x64/bin/imapsync.exe`.
+- The credential model (ADR-007) is unchanged: passwords travel via
+  `IMAPSYNC_PASSWORD1` / `IMAPSYNC_PASSWORD2`, which the `imapsync` source
+  reads on Windows exactly as on macOS.
+- The executable name differs by platform (`imapsync.exe` on Windows,
+  `imapsync` on macOS), handled by `src/main/runtime/arch.ts`.
+- Reproducibility is via the pinned zip + exe SHA-256 (not a source build).
+- NLPL redistribution terms apply as on macOS (see
+  `docs/third-party-licenses.md`).
+
+## ADR-017 — Windows artifacts are unsigned (SmartScreen documented)
+
+- **Status:** accepted
+- **Date:** 2026-09-10
+
+The Windows NSIS installer and the application it installs are **unsigned**:
+no Authenticode certificate is available, and none is assumed.
+
+### Consequences
+
+- electron-builder applies no signing to the Windows target (no `win.certificate*`
+  configuration), so the installer and the installed `imapSyncGUI.exe` carry no
+  Authenticode signature.
+- Microsoft Defender SmartScreen is expected to warn (or block with an
+  "Unknown publisher" interstitial) on first run of a freshly downloaded
+  unsigned installer. This is a known distribution limitation, **not** a
+  malware detection, and must be described honestly and never worked around by
+  disabling Defender/SmartScreen or instructing users to do so.
+- Proper Authenticode signing is deferred, optional, client-funded release
+  hardening (mirroring the macOS Developer ID/notarization deferral).
+
+### Details
+
+- Installer target: NSIS, `perMachine: false` (per-user install, no elevation),
+  assisted (`oneClick: false`) with a directory-selection page, Start Menu
+  integration, and normal uninstall support.
+- The unsigned state does not weaken the application's runtime security model:
+  the renderer sandbox, narrow preload/IPC surface, shell-free `spawn`,
+  credential-via-environment model, and deterministic runtime resolution all
+  remain unchanged on Windows.

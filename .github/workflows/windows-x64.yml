@@ -1,0 +1,183 @@
+name: Windows x64 (native) verification
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    steps:
+      - name: Verify native Windows x64 host
+        shell: pwsh
+        run: |
+          $platform = node -p "process.platform"
+          $arch = node -p "process.arch"
+          Write-Output "process.platform = $platform"
+          Write-Output "process.arch = $arch"
+          if ($platform -ne "win32") { throw "ERROR: runner is not Windows; aborting." }
+          if ($arch -ne "x64") { throw "ERROR: Node.js is not running as x64; aborting." }
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable Corepack
+        shell: pwsh
+        run: corepack enable
+
+      - name: Record environment
+        shell: pwsh
+        run: |
+          Write-Output "OS: $([System.Environment]::OSVersion.VersionString)"
+          Write-Output "PROCESSOR_ARCHITECTURE: $env:PROCESSOR_ARCHITECTURE"
+          Write-Output "node: $(node --version)"
+          Write-Output "process.arch: $(node -p 'process.arch')"
+          Write-Output "pnpm: $(pnpm --version)"
+          Write-Output "git commit: ${{ github.sha }}"
+
+      - name: Install dependencies
+        shell: pwsh
+        run: pnpm install --frozen-lockfile
+
+      - name: Baseline verification
+        shell: pwsh
+        run: pnpm verify
+
+      - name: Build Windows x64 runtime
+        shell: pwsh
+        run: pnpm --filter @imapsyncgui/desktop run runtime:build:win
+
+      - name: Validate Windows runtime manifest
+        shell: pwsh
+        run: pnpm --filter @imapsyncgui/desktop run runtime:validate --runtime-arch win32-x64
+
+      - name: Verify PE architecture with native .NET tooling
+        shell: pwsh
+        working-directory: apps/desktop
+        run: |
+          $binary = "runtime/win32-x64/bin/imapsync.exe"
+          $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $binary).Path)
+          if ($bytes.Length -lt 0x40) { throw "file too small to be a PE executable" }
+          if ($bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw "missing MZ signature" }
+          $peOffset = [BitConverter]::ToInt32($bytes, 0x3C)
+          if ($bytes[$peOffset] -ne 0x50 -or $bytes[$peOffset + 1] -ne 0x45) { throw "missing PE signature" }
+          $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
+          Write-Output "PE machine: 0x$($machine.ToString('x4'))"
+          if ($machine -ne 0x8664) { throw "imapsync.exe is not AMD64 (x86-64)" }
+          Write-Output "PE executable verified as AMD64 (x86-64)"
+
+      - name: Self-test Windows runtime (host isolation)
+        shell: pwsh
+        run: pnpm --filter @imapsyncgui/desktop run runtime:self-test --runtime-arch win32-x64
+
+      - name: Build Windows x64 application
+        shell: pwsh
+        run: pnpm --filter @imapsyncgui/desktop run package:win:x64
+
+      - name: Packaged runtime smoke test
+        shell: pwsh
+        run: pnpm --filter @imapsyncgui/desktop run package:smoke --runtime-arch win32-x64
+
+      - name: Inspect packaged application layout
+        shell: pwsh
+        working-directory: apps/desktop
+        run: |
+          $resources = "release/win-unpacked/resources"
+          Write-Output "resources: $resources"
+          Get-ChildItem -Recurse "release/win-unpacked/resources/runtime/win32-x64" | Select-Object FullName
+          Write-Output "--- manifest ---"
+          Get-Content "release/win-unpacked/resources/runtime/win32-x64/manifest.json"
+
+      - name: Verify installer artifact
+        shell: pwsh
+        working-directory: apps/desktop
+        run: |
+          $installer = Get-ChildItem "release/*-windows-x64-setup.exe" | Select-Object -First 1
+          if (-not $installer) { throw "no Windows x64 installer produced" }
+          Write-Output "installer: $($installer.FullName) ($($installer.Length) bytes)"
+          $bytes = [System.IO.File]::ReadAllBytes($installer.FullName)
+          if ($bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw "installer is not a PE executable" }
+          $peOffset = [BitConverter]::ToInt32($bytes, 0x3C)
+          $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
+          Write-Output "installer PE machine: 0x$($machine.ToString('x4'))"
+          if ($machine -ne 0x8664) { throw "installer is not AMD64" }
+
+      - name: Silent install into disposable location
+        shell: pwsh
+        working-directory: apps/desktop
+        run: |
+          $installer = (Get-ChildItem "release/*-windows-x64-setup.exe" | Select-Object -First 1).FullName
+          $installDir = "C:\imapsyncgui-e2e"
+          if (Test-Path $installDir) { Remove-Item -Recurse -Force $installDir }
+          Write-Output "installing $installer -> $installDir"
+          $proc = Start-Process -FilePath $installer -ArgumentList "/S /D=$installDir" -Wait -PassThru
+          Write-Output "installer exit code: $($proc.ExitCode)"
+          if ($proc.ExitCode -ne 0) { throw "installer failed with exit code $($proc.ExitCode)" }
+          if (-not (Test-Path "$installDir/imapSyncGUI.exe")) { throw "installed application executable missing" }
+          Write-Output "installed application executable present"
+          Add-Content -Path $env:GITHUB_ENV -Value "INSTALL_DIR=$installDir"
+
+      - name: Verify installed files
+        shell: pwsh
+        run: |
+          Write-Output "installed tree:"
+          Get-ChildItem -Recurse "$env:INSTALL_DIR" | Where-Object { -not $_.PSIsContainer } | Select-Object FullName, Length
+          $runtimeExe = "$env:INSTALL_DIR/resources/runtime/win32-x64/bin/imapsync.exe"
+          if (-not (Test-Path $runtimeExe)) { throw "installed runtime imapsync.exe missing" }
+          Write-Output "installed runtime present: $runtimeExe"
+
+      - name: Smoke test installed application runtime
+        shell: pwsh
+        run: |
+          pnpm --filter @imapsyncgui/desktop run package:smoke --runtime-arch win32-x64 --resources "$env:INSTALL_DIR/resources"
+
+      - name: Uninstall cleanly
+        shell: pwsh
+        if: always()
+        run: |
+          if ($env:INSTALL_DIR -and (Test-Path $env:INSTALL_DIR)) {
+            $uninstaller = "$env:INSTALL_DIR/Uninstall imapSyncGUI.exe"
+            if (Test-Path $uninstaller) {
+              Start-Process -FilePath $uninstaller -ArgumentList "/S" -Wait
+              Start-Sleep -Seconds 2
+            }
+            if (Test-Path $env:INSTALL_DIR) { Remove-Item -Recurse -Force $env:INSTALL_DIR }
+            Write-Output "uninstall complete"
+          }
+
+      - name: Record artifact metadata and checksums
+        shell: pwsh
+        working-directory: apps/desktop
+        run: |
+          $installer = Get-ChildItem "release/*-windows-x64-setup.exe" | Select-Object -First 1
+          $hash = (Get-FileHash -Algorithm SHA256 $installer.FullName).Hash.ToLower()
+          $manifest = Get-Content "release/win-unpacked/resources/runtime/win32-x64/manifest.json" | ConvertFrom-Json
+          $pkg = Get-Content "./package.json" | ConvertFrom-Json
+          $info = @(
+            "filename: $($installer.Name)"
+            "application version: $($pkg.version)"
+            "platform: win32"
+            "architecture: x64"
+            "git commit: ${{ github.sha }}"
+            "imapsync version: $($manifest.imapsyncVersion)"
+            "imapsync.exe SHA-256: $($manifest.artifactSha256)"
+            "installer SHA-256: $hash"
+          )
+          $info | ForEach-Object { Write-Output $_ }
+          Set-Content -Path "release/SHA256SUMS-win-x64.txt" -Value "$hash  $($installer.Name)"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: imapSyncGUI-windows-x64
+          path: |
+            apps/desktop/release/*-windows-x64-setup.exe
+            apps/desktop/release/SHA256SUMS-win-x64.txt
+            apps/desktop/release/win-unpacked/resources/runtime/win32-x64/manifest.json
+          if-no-files-found: error

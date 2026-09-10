@@ -1,506 +1,817 @@
-# TASK-010 — Clean-machine end-to-end verification
+# TASK-011 — Windows x64 application and self-contained imapsync runtime
 
 ## Goal
 
-Verify the complete macOS user workflow on a clean compatible system using the actual packaged application artifacts.
-
-This task validates the product as a user would experience it.
-
-Signing and notarization are explicitly out of scope for this task.
-
-Unsigned Gatekeeper behavior must be documented honestly and treated as an expected distribution limitation, not as an application failure.
-
-## Context
-
-The project now has:
-
-- complete renderer migration workflow;
-- correct IMAP STARTTLS behavior;
-- real IMAP connection testing;
-- migration start / streaming / cancellation / result UX;
-- lifecycle race protection;
-- explicit `imapsync --nolog` policy;
-- controlled temp/work directory behavior;
-- proven self-contained x86_64 runtime;
-- proven self-contained arm64 runtime;
-- architecture-specific packaged applications;
-- native arm64 CI verification;
-- packaged runtime smoke tests;
-- no end-user Homebrew/system Perl dependency.
-
-Remaining known release limitation:
-
-- application artifacts are unsigned and not notarized because no Apple Developer Program credentials are currently available.
-
-## Definition of clean machine
-
-A clean-machine verification environment must not depend on the development repository or development runtime.
-
-The target system must not require:
+Extend imapSyncGUI to Windows and produce a real downloadable Windows x64 `.exe` installer that works on a normal Windows machine without requiring the user to install:
 
 - Node.js;
 - pnpm;
-- Homebrew;
-- MacPorts;
-- Perl installation;
-- `imapsync` installation;
-- repository source files;
-- developer build output outside the packaged application.
+- Perl;
+- imapsync;
+- Git;
+- WSL;
+- Cygwin;
+- MSYS2;
+- Chocolatey;
+- Scoop;
+- or any developer tooling.
 
-Testing on a normal user account is preferred.
+The Windows application must preserve the existing security model and user workflow of the macOS application.
 
-Do not configure the machine to imitate the developer workstation.
+Initial Windows scope is:
 
-## Architectures
+```text
+Windows x86_64 only
+```
 
-Verify at least every architecture currently claimed as supported.
+Windows ARM64 is out of scope for this task.
 
-### x86_64
+---
 
-Test the Intel artifact on a compatible Intel macOS system.
+# Context
 
-### arm64
+The macOS application currently has:
 
-Test the Apple Silicon artifact on a compatible native Apple Silicon macOS system.
+- Electron + React + TypeScript;
+- secure context-isolated renderer;
+- narrow typed IPC;
+- real IMAP connection testing;
+- TLS and STARTTLS support;
+- migration start / streaming / cancellation / results;
+- lifecycle race protection;
+- credential sanitization;
+- explicit `imapsync --nolog`;
+- controlled temporary working directory;
+- self-contained x86_64 and arm64 macOS runtimes;
+- architecture-specific release packaging.
 
-Do not use Rosetta as proof of arm64 support.
+TASK-010 remains incomplete because physical macOS E2E testing is still pending.
 
-If clean physical hardware is unavailable for one architecture, use the strongest realistic native environment available and document the limitation precisely.
+Windows support is a new platform target and must not invalidate or weaken the existing macOS implementation.
 
-Do not claim a clean-machine test occurred when only CI packaging/runtime smoke tests were performed.
+---
 
-## Test artifact
+# Task tracking
 
-Use the actual produced distribution artifact.
+Before starting implementation:
+
+1. preserve the full current TASK-010 specification;
+2. record TASK-010 as:
+
+```text
+Paused — awaiting manual physical macOS E2E
+```
+
+3. do not mark TASK-010 Complete;
+4. make TASK-011 the single active task in `tasks/current.md`;
+5. preserve TASK-010 so it can be restored after TASK-011.
+
+After TASK-011 completes, restore TASK-010 as the active pending manual task unless another explicitly approved task replaces it.
+
+---
+
+# Supported Windows target
+
+Target:
+
+```text
+Windows 10/11 x86_64
+```
+
+The primary release artifact must be a normal `.exe` installer.
+
+Preferred packaging:
+
+```text
+NSIS installer via electron-builder
+```
+
+A portable build or ZIP may optionally be produced for diagnostics, but it is not a substitute for the installer.
+
+Expected release artifact naming should be architecture-explicit, for example:
+
+```text
+imapSyncGUI-0.1.0-windows-x64-setup.exe
+```
+
+Exact naming may follow existing versioning conventions.
+
+---
+
+# Part 1 — Audit cross-platform assumptions
+
+Before changing code, inspect the current implementation for macOS-specific assumptions.
+
+Review at minimum:
+
+- filesystem paths;
+- path separators;
+- executable resolution;
+- temporary directories;
+- process working directory;
+- process spawning;
+- packaged resource paths;
+- Electron packaging configuration;
+- application lifecycle;
+- shell assumptions;
+- file permissions;
+- runtime validation;
+- architecture naming;
+- smoke-test tooling;
+- scripts invoking macOS-only commands.
+
+Identify which parts are:
+
+```text
+application runtime logic
+```
+
+versus:
+
+```text
+macOS packaging / verification logic
+```
+
+Do not duplicate generic application logic unnecessarily.
+
+Prefer platform-specific adapters/helpers only where the operating systems genuinely differ.
+
+---
+
+# Part 2 — Research Windows imapsync distribution
+
+Determine the safest maintainable way to ship a self-contained `imapsync` runtime for Windows x64.
+
+Research current upstream imapsync distribution options.
+
+Prefer, in order:
+
+1. official upstream standalone Windows x64 executable;
+2. reproducibly built self-contained upstream-compatible executable;
+3. another evidence-backed bundled runtime strategy requiring no end-user dependencies.
+
+Do not silently download arbitrary third-party binaries.
+
+For any external runtime artifact record:
+
+- upstream source;
+- version;
+- architecture;
+- release URL/source;
+- SHA-256;
+- license;
+- dependency model.
+
+Do not assume the macOS PAR::Packer strategy automatically applies unchanged to Windows.
+
+Research and decide based on evidence.
+
+Document the decision as an ADR.
+
+---
+
+# Part 3 — Runtime architecture model
+
+Extend runtime architecture handling to support Windows x64.
+
+Conceptually the runtime matrix should support:
+
+```text
+darwin-x64
+darwin-arm64
+win32-x64
+```
+
+Do not rename existing macOS runtime directories unless necessary.
+
+Packaged Windows runtime should live under an architecture-specific application resource location equivalent to:
+
+```text
+resources/runtime/win32-x64/
+```
+
+or another clearly documented deterministic path.
+
+Packaged mode must never fall back to:
+
+- PATH;
+- locally installed imapsync;
+- Strawberry Perl;
+- system Perl;
+- WSL;
+- developer environment variables.
+
+Development mode may retain narrowly controlled developer overrides if already supported, but packaged behavior must be deterministic.
+
+---
+
+# Part 4 — Windows runtime provenance manifest
+
+Extend the existing runtime manifest/provenance model for Windows.
+
+Record at minimum:
+
+- platform;
+- architecture;
+- imapsync version;
+- runtime artifact filename;
+- artifact SHA-256;
+- upstream/source information;
+- build method if self-built;
+- relevant embedded runtime version if applicable.
+
+Runtime validation must reject:
+
+- missing runtime;
+- wrong platform;
+- wrong architecture;
+- malformed manifest;
+- unexpected executable type.
+
+Do not simply print architecture information.
+
+Assert it.
+
+---
+
+# Part 5 — Windows executable validation
+
+Use Windows-appropriate tooling in native Windows CI.
+
+Verify the bundled executable is a Windows x64 PE executable.
+
+Use reliable native/available tooling such as PowerShell/.NET/Visual Studio tooling or another evidence-backed method.
+
+Do not use filename extension alone as architecture proof.
+
+The verification must establish:
+
+```text
+PE executable
+x86_64 / AMD64
+```
+
+---
+
+# Part 6 — Process launching
+
+Preserve the core security invariant:
+
+```text
+no shell
+```
+
+Continue using direct process spawning.
+
+Conceptually:
+
+```ts
+spawn(executable, args, options);
+```
+
+Do not use:
+
+```text
+cmd.exe
+powershell.exe
+shell: true
+```
+
+to launch imapsync.
+
+Passwords must remain outside argv.
+
+Preserve the existing credential environment-variable model unless Windows runtime evidence proves it incompatible.
+
+If changes are necessary, document the security tradeoff before implementation.
+
+---
+
+# Part 7 — Windows environment sanitization
+
+Review the existing sanitized runtime environment for cross-platform correctness.
+
+Continue removing environment values that could influence bundled runtime behavior unexpectedly.
+
+Add Windows-specific sanitization only where justified.
+
+Do not pass the entire uncontrolled development environment if a deterministic minimal environment is feasible.
+
+Preserve required Windows variables needed for normal executable operation.
+
+Do not break:
+
+- system temp resolution;
+- TLS;
+- DNS;
+- networking;
+- Windows system DLL resolution.
+
+Add tests for the final environment policy.
+
+---
+
+# Part 8 — Temporary/log behavior
+
+Preserve TASK-009D log protections.
+
+Windows runtime must:
+
+- use `--nolog`;
+- use an application-controlled temp/work path;
+- not write `LOG_imapsync` into the app directory;
+- not write `W` into the app directory;
+- not write logs into the user's current working directory;
+- never derive temp/log paths from renderer input.
+
+Use an appropriate OS temporary directory.
+
+Do not write inside:
+
+```text
+Program Files
+```
+
+or the installed application resources.
+
+Cleanup app-owned temporary data where safe.
+
+Failure to clean temporary files must not crash the application.
+
+---
+
+# Part 9 — Connection testing
+
+The existing Node-based IMAP connection testing should remain platform-independent.
+
+Verify on Windows:
+
+- implicit TLS;
+- STARTTLS;
+- authentication failures;
+- timeout handling;
+- DNS failures.
+
+Do not introduce a second Windows-specific IMAP implementation unless technically required.
+
+STARTTLS must retain the corrected sequence:
+
+```text
+greeting
+→ STARTTLS
+→ tagged OK
+→ TLS upgrade
+→ CAPABILITY
+→ LOGIN
+```
+
+Credentials must never be sent before TLS completion in STARTTLS mode.
+
+---
+
+# Part 10 — Renderer behavior
+
+Keep the same application workflow.
+
+Do not create a separate Windows UI.
+
+Required behavior remains:
+
+- source server form;
+- destination server form;
+- connection tests;
+- start migration;
+- streamed output;
+- cancel;
+- success/failure/cancelled terminal state;
+- repeat migration flow.
+
+Only make platform-specific UI changes where actually necessary.
+
+---
+
+# Part 11 — Windows packaging
+
+Extend `electron-builder` configuration to produce Windows x64 packaging.
+
+Preferred target:
+
+```text
+NSIS
+```
+
+Build:
+
+```text
+Windows x64 only
+```
+
+Do not add ARM64 or 32-bit builds.
+
+The packaged application must include the Windows runtime outside ASAR if required by executable execution.
+
+Ensure the runtime executable is not compressed/stored in a way that prevents launching.
+
+---
+
+# Part 12 — Installer UX
+
+Use a conventional Windows installer.
+
+The installer should:
+
+- install the application into an appropriate user/system application location;
+- create Start Menu integration where standard;
+- provide normal uninstall support;
+- launch without requiring a terminal.
+
+Do not add complex installer customization.
+
+A default professional electron-builder NSIS experience is sufficient.
+
+Do not request administrator privileges unless actually necessary.
+
+Prefer per-user installation if it avoids unnecessary elevation and is technically appropriate.
+
+Document the final choice.
+
+---
+
+# Part 13 — Windows code signing status
+
+No paid Windows code-signing certificate is assumed available.
+
+Therefore the first Windows E2E release may be unsigned.
+
+Document explicitly:
+
+- installer/application is unsigned;
+- Microsoft Defender SmartScreen may warn;
+- this is a known distribution limitation;
+- it is separate from malware detection;
+- proper Authenticode/code-signing can be added later as optional/client-funded release hardening.
 
 Do not:
 
-- run `pnpm dev`;
-- launch the unpackaged app;
-- substitute staging runtime files;
-- modify the `.app` contents after packaging;
-- install runtime dependencies manually.
+- bypass SmartScreen programmatically;
+- disable Defender;
+- instruct users to disable Windows security;
+- falsely describe unsigned artifacts as trusted/signed.
+
+If electron-builder applies any internal/default signing behavior, document exactly what it does.
+
+---
+
+# Part 14 — Windows CI
+
+Add native Windows GitHub Actions verification.
+
+Use an appropriate Windows x64 runner.
+
+The CI must prove:
+
+```text
+Node process.arch = x64
+Node process.platform = win32
+```
+
+Then execute:
+
+1. dependency installation;
+2. `pnpm verify`;
+3. Windows runtime acquisition/build;
+4. runtime manifest validation;
+5. runtime architecture validation;
+6. runtime self-test;
+7. Electron Windows x64 packaging;
+8. packaged application smoke test;
+9. installer existence/structure verification;
+10. artifact upload.
+
+Do not claim Windows support based on cross-compilation from macOS alone.
+
+Native Windows execution evidence is required.
+
+---
+
+# Part 15 — Runtime self-test
+
+Create or extend runtime self-test tooling to support:
+
+```text
+win32-x64
+```
+
+The self-test must execute the actual packaged Windows imapsync runtime.
+
+It must prove at minimum that:
+
+- executable starts;
+- expected imapsync version is reported;
+- architecture/platform matches manifest;
+- bundled runtime does not depend on separately installed imapsync;
+- runtime works under sanitized environment;
+- no developer PATH dependency is required.
+
+Where practical, perform an offline imapsync test mode equivalent to existing macOS self-testing.
+
+Do not require real mailbox credentials in CI.
+
+---
+
+# Part 16 — Packaged app smoke test
+
+Test the actual packaged Windows application layout.
+
+The smoke test must resolve runtime from the installed/packaged resources location, not from the repository runtime directory.
+
+Prove the packaged app can invoke its bundled runtime.
+
+Do not let PATH fallback make the smoke test pass.
+
+---
+
+# Part 17 — Installer verification
+
+After producing the installer, verify the actual `.exe` artifact.
 
 Record:
 
+- filename;
 - application version;
-- artifact filename;
+- platform;
 - architecture;
-- commit/release identifier;
-- artifact SHA-256 where practical.
+- git commit;
+- imapsync version;
+- SHA-256.
 
-## Download / transfer simulation
+Where practical in CI:
 
-Test the artifact through a realistic user-distribution path where possible.
+- install silently or normally into a disposable location;
+- verify installed files;
+- run packaged smoke against installed app;
+- uninstall cleanly.
 
-For example:
+Do not rely solely on electron-builder reporting success.
 
-- download from GitHub Actions artifact/release;
-- transfer the `.zip` / selected distribution archive to the clean machine;
-- extract normally.
+---
 
-Avoid testing only the exact local build directory copy if that bypasses quarantine/Gatekeeper behavior.
+# Part 18 — Real Windows E2E test preparation
 
-## Gatekeeper / unsigned behavior
+Create:
 
-The application is currently unsigned and not notarized.
+```text
+docs/e2e-windows.md
+```
 
-Document exactly what macOS does on first launch.
+Model it after the macOS E2E document, but use Windows-specific behavior.
 
-Expected possibilities include:
+Include fields:
 
-- normal launch blocked;
-- warning about unidentified/unverified developer;
-- requirement to use macOS Privacy & Security / Open Anyway;
-- context-menu Open behavior depending on macOS version.
+```text
+Machine:
+Windows version:
+CPU architecture:
+release tag:
+installer filename:
+installer SHA-256:
+SmartScreen behavior:
+installation result:
+application launch:
+source connection:
+destination connection:
+migration:
+cancellation:
+repeat migration:
+residue inspection:
+```
 
-Do not:
+Do not claim physical Windows E2E completion during this task unless it actually occurs.
 
-- disable Gatekeeper globally;
-- run undocumented `xattr` removal as the normal user workflow;
-- tell users to disable macOS security;
-- describe the unsigned warning as a virus detection;
-- mark expected unsigned Gatekeeper behavior as an application defect.
+---
 
-Document the minimum normal macOS user action required to launch the application.
+# Part 19 — Real mailbox E2E criteria
 
-## Application startup
+The future physical Windows E2E must eventually test:
 
-After the user completes any expected unsigned-app approval flow:
+1. download installer from GitHub;
+2. observe real SmartScreen behavior;
+3. install application;
+4. launch without developer tooling;
+5. test source connection;
+6. test destination connection;
+7. perform a real controlled mailbox migration;
+8. inspect destination independently;
+9. test cancellation;
+10. test repeat migration;
+11. inspect logs/temp residue;
+12. uninstall application.
 
-Verify:
+TASK-011 may prepare this workflow without fabricating the human test.
 
-- application launches;
-- renderer loads correctly;
-- no terminal is required;
-- no missing runtime error appears;
-- no Homebrew/system Perl prompt appears;
-- no crash occurs.
+---
 
-## Runtime isolation verification
+# Part 20 — GitHub pre-release
 
-On the clean machine, confirm the app performs runtime preflight successfully.
+After native Windows CI and packaged verification pass, publish a new GitHub pre-release.
 
-The user must not need to know where `imapsync` or Perl lives.
+Do not silently replace existing macOS releases.
 
-Where practical verify that:
+Use a new immutable release tag, for example:
 
-- `imapsync` is not installed globally;
-- Homebrew is absent or irrelevant;
-- system Perl is not used by the application.
+```text
+v0.1.0-e2e.3
+```
 
-Do not modify the clean system merely to satisfy the test.
+or another clearly versioned pre-release.
 
-## Real IMAP connection test
+Prefer one release containing all currently useful test artifacts:
 
-Use controlled test mailboxes.
+```text
+macOS Intel DMG
+macOS Apple Silicon DMG
+Windows x64 setup EXE
+SHA256SUMS.txt
+```
 
-Do not use production/customer credentials for verification unless explicitly authorized.
+If preserving the previously proven macOS assets in the same new release creates provenance ambiguity, publishing a Windows-specific test pre-release is acceptable.
 
-Create or use test accounts containing non-sensitive mail.
+Document the decision.
 
-Verify source connection testing for:
+---
 
-- host;
-- port;
-- selected security mode;
-- authentication.
+# Part 21 — Public artifact re-download verification
 
-Verify destination connection testing likewise.
+After publishing, download the Windows installer back from the normal GitHub Releases page/API.
 
-At minimum perform a real TLS-based scenario.
+Verify the exact public artifact:
 
-If STARTTLS is relevant to supported deployments, perform one real STARTTLS server verification as well.
+- SHA-256 matches;
+- valid PE executable;
+- x64 architecture;
+- installer can execute in native Windows CI/test environment.
 
-Do not rely only on mocks for this task.
+Do not validate only the pre-upload local artifact.
 
-## Failed authentication test
+---
 
-Enter an intentionally incorrect password for a test account.
+# Part 22 — Documentation
 
-Verify:
+Update as appropriate:
 
-- authentication test fails clearly;
-- no password is shown in the UI;
-- no raw stack trace appears;
-- the application remains usable afterward.
+- `README.md`;
+- `docs/architecture.md`;
+- `docs/security.md`;
+- `docs/runtime.md`;
+- `docs/testing.md`;
+- `docs/decisions.md`;
+- `docs/progress.md`;
+- `docs/third-party-licenses.md`;
+- `docs/e2e-windows.md`;
+- runtime/release documentation.
 
-Then correct the password and verify recovery.
+Update the product/platform documentation so it no longer implies macOS-only support once Windows packaging is actually proven.
 
-## Real migration test
+Do not claim Windows clean-machine verification unless physical/manual evidence exists.
 
-Perform an actual small mailbox migration between controlled test accounts.
+---
 
-Prepare a source mailbox with a deterministic small dataset.
+# Security regression requirements
 
-For example, include:
+Windows support must preserve all existing protections:
 
-- several normal messages;
-- nested folders if supported by the current migration behavior;
-- messages with attachments;
-- Unicode subject/sender/folder data where practical.
+- `contextIsolation: true`;
+- `nodeIntegration: false`;
+- sandboxed renderer where supported by current architecture;
+- narrow preload API;
+- explicit IPC channels;
+- runtime validation;
+- shell-free process execution;
+- passwords absent from argv;
+- credential redaction;
+- bounded streamed output;
+- controlled temp directory;
+- persistent imapsync logs disabled;
+- TLS certificate validation;
+- no renderer-controlled filesystem paths;
+- no generic IPC bridge.
 
-Do not use a huge mailbox for the initial E2E proof.
+Do not weaken the macOS security model to make Windows easier.
 
-Record the expected test dataset.
+---
 
-## Migration workflow
+# macOS regression protection
 
-Verify the complete user path:
+TASK-011 must not regress:
 
-1. enter source endpoint;
-2. enter destination endpoint;
-3. test source connection;
-4. test destination connection;
-5. start migration;
-6. observe streamed output;
-7. reach terminal success state;
-8. return to the form.
+```text
+darwin-x64
+darwin-arm64
+```
 
-Confirm that no terminal or external tool is required.
+At minimum:
 
-## Migration correctness
+```bash
+pnpm verify
+```
 
-After migration, inspect the destination mailbox using an independent mail client/webmail where practical.
+must remain green.
 
-Verify at minimum:
+If shared runtime or packaging logic materially changes, rerun the strongest relevant macOS verification.
 
-- expected folders exist;
-- expected messages arrived;
-- attachments are present;
-- message subjects/content are intact;
-- Unicode test data survives;
-- no obvious unexpected duplication occurred.
+If arm64 shared runtime invocation is affected, rerun native arm64 CI.
 
-Do not claim full imapsync semantic correctness from a tiny test dataset.
+Do not unnecessarily rebuild proven macOS runtimes when Windows-only code is isolated.
 
-This task proves the supported user workflow, not every possible IMAP edge case.
+---
 
-## Repeat migration flow
+# Tests
 
-Use the application's "Start another migration" flow.
+Add deterministic tests for at least:
 
-Verify:
+- Windows platform/architecture mapping;
+- runtime path resolution;
+- packaged resolution with `win32-x64`;
+- manifest validation;
+- executable naming;
+- runtime environment handling;
+- temp/cwd behavior;
+- Windows argument generation;
+- credential exclusion from argv;
+- no shell execution;
+- installer artifact naming;
+- platform-specific packaging configuration.
 
-- previous output is cleared;
-- previous success state is cleared;
-- endpoint values may remain;
-- connection tests are no longer trusted;
-- fresh connection tests are required;
-- second migration can start normally.
+Do not add meaningless tests solely to increase test count.
 
-## Cancellation E2E
+---
 
-Perform a controlled migration long enough to exercise cancellation if practical.
-
-Verify:
-
-- cancel action is available;
-- UI enters cancelling state;
-- output remains visible;
-- process stops;
-- final state is cancellation, not failure.
-
-Do not claim rollback.
-
-Document what remains in the destination mailbox after cancellation if observable.
-
-## Failure E2E
-
-Trigger at least one safe real migration failure where practical.
-
-Examples:
-
-- unreachable test host;
-- deliberately invalid destination authentication before migration;
-- controlled runtime-unavailable fixture only if this can be done without altering the release artifact.
-
-Verify:
-
-- safe user-facing message;
-- no stack trace;
-- no internal path leakage;
-- app can recover to another migration attempt.
-
-Do not corrupt the actual release runtime solely to manufacture a failure unless testing from a disposable copy.
-
-## Persistent-file inspection
-
-After connection tests and migrations, inspect normal user-accessible locations for unexpected application/runtime residue.
-
-Specifically verify that the app does not leave uncontrolled:
-
-- `LOG_imapsync/`;
-- `W/`;
-- repository-style temp folders;
-- plaintext credential files.
-
-Controlled OS temporary files may exist transiently.
-
-Document any persistent application files that are intentionally created.
-
-## Credential hygiene
-
-During E2E verification, inspect:
-
-- application UI;
-- diagnostic output;
-- streamed migration output;
-- normal logs;
-- obvious process invocation where practical.
-
-Verify passwords do not appear.
-
-Do not include real passwords in screenshots, CI logs, task documentation, or bug reports.
-
-## Network/security behavior
-
-Verify TLS certificate validation remains enabled.
-
-Do not bypass certificate verification merely to make a test server work.
-
-If using a test server with invalid/self-signed certificates, treat rejection as correct behavior unless product requirements explicitly support custom trust.
-
-## Offline/runtime behavior
-
-After the application has been downloaded/extracted, no network access should be required merely to load the bundled runtime.
-
-The actual migration naturally requires network connectivity to the IMAP servers.
-
-Do not confuse runtime self-containment with offline email migration.
-
-## User-facing usability notes
-
-Record obvious user-facing issues encountered during the test.
-
-Only fix small release-blocking defects discovered during E2E.
-
-Do not expand this task into a redesign.
-
-If a larger UX issue is found:
-
-- record it in backlog;
-- keep TASK-010 focused.
-
-## Architecture-specific differences
-
-Record any behavior difference between x86_64 and arm64.
-
-Expected application behavior should be equivalent.
-
-Architecture-specific packaging/runtime internals must not leak into normal user UX.
-
-## Evidence
-
-Create a concise test report.
-
-Suggested location:
-
-`docs/e2e-macos.md`
-
-Record for each tested architecture:
-
-- hardware/model category;
-- CPU architecture;
-- macOS version;
-- artifact version/name;
-- artifact SHA-256 if available;
-- Gatekeeper first-launch behavior;
-- runtime preflight;
-- source connection test result;
-- destination connection test result;
-- real migration result;
-- cancellation result if tested;
-- repeat migration result;
-- residue/log inspection;
-- known limitations.
-
-Do not record credentials.
-
-## Screenshots
-
-Screenshots are optional.
-
-If used:
-
-- redact addresses/credentials when sensitive;
-- do not capture passwords;
-- keep them out of Git if they are large or contain private test data unless explicitly useful.
-
-## Signing/notarization status
-
-State clearly in the E2E report:
-
-- artifact is unsigned;
-- artifact is not notarized;
-- Gatekeeper approval is therefore expected;
-- signing/notarization is optional future/client-funded release hardening.
-
-Do not mark TASK-010 blocked solely because notarization is absent.
-
-## Automated verification
+# Verification
 
 Run:
 
-`pnpm verify`
+```bash
+pnpm verify
+```
 
-before producing the test artifact.
+Current baseline is:
 
-Existing CI/runtime tests must remain green.
+```text
+192 tests
+```
 
-TASK-010 itself requires manual/native E2E evidence in addition to automated verification.
+All existing tests must remain green.
 
-## Regression handling
+Require successful native Windows CI before declaring TASK-011 complete.
 
-If E2E finds a real release-blocking application defect:
+---
 
-1. reproduce it;
-2. add a deterministic automated regression test where appropriate;
-3. fix it narrowly;
-4. run `pnpm verify`;
-5. rebuild the affected artifact;
-6. repeat the relevant E2E step.
+# Acceptance criteria
 
-Do not merely document a reproducible correctness/security bug as a known limitation when it can reasonably be fixed.
+TASK-011 is complete only when:
 
-## Scope restrictions
+- current codebase runs through `pnpm verify`;
+- Windows x64 runtime strategy is researched and documented;
+- runtime provenance is recorded;
+- bundled Windows runtime is self-contained for the end user;
+- packaged mode never depends on PATH-installed imapsync/Perl;
+- runtime is verified as Windows x64;
+- runtime self-test passes natively on Windows;
+- existing secure spawn model is preserved;
+- passwords remain outside argv;
+- log/temp protections remain intact;
+- Windows x64 Electron app builds successfully;
+- a Windows x64 NSIS `.exe` installer is produced;
+- installer contains the correct packaged application/runtime;
+- native Windows GitHub Actions CI passes;
+- packaged/installed runtime smoke test passes;
+- final installer SHA-256 is recorded;
+- installer is published to a GitHub pre-release;
+- exact public installer is re-downloaded and verified;
+- `docs/e2e-windows.md` exists;
+- unsigned/SmartScreen limitation is documented honestly;
+- macOS behavior is not regressed;
+- no Windows ARM64 or 32-bit scope creep is introduced;
+- TASK-010 remains incomplete and preserved for physical macOS E2E.
 
-Do not:
+---
 
-- enroll in Apple Developer Program;
-- implement signing/notarization;
-- disable Gatekeeper globally;
-- require users to install Homebrew;
-- add migration history;
-- add provider-specific features;
-- implement OAuth;
-- redesign the UI;
-- add auto-update;
-- add Windows/Linux support;
-- use customer production mailboxes without authorization.
+# Completion lifecycle
 
-## Acceptance criteria
+When TASK-011 is complete:
 
-TASK-010 is complete when:
+1. archive the full specification as:
 
-- `pnpm verify` passes;
-- actual packaged artifact is used;
-- at least one clean/native environment completes the full user workflow;
-- every architecture claimed as clean-machine verified has real native evidence;
-- first-launch Gatekeeper behavior is documented honestly;
-- application launches after normal unsigned-app approval;
-- bundled runtime works without end-user Homebrew/system Perl setup;
-- real source/destination IMAP authentication succeeds with controlled test accounts;
-- at least one real mailbox migration succeeds;
-- destination mailbox is independently inspected;
-- repeat-migration flow works;
-- credentials do not appear in UI/output/logs;
-- uncontrolled `LOG_imapsync/` / `W/` residue is absent;
-- failures remain safe and recoverable;
-- signing/notarization limitation is documented;
-- `docs/e2e-macos.md` records the evidence and remaining limitations.
+```text
+tasks/done/TASK-011.md
+```
 
-If an architecture has not undergone a real clean/native E2E run, do not describe that architecture as clean-machine verified.
-
-## Task lifecycle
-
-On completion:
-
-1. mark `tasks/current.md` as `Complete`;
-2. archive the task as `tasks/done/TASK-010.md`;
-3. append the result to `docs/progress.md`;
-4. update backlog with concrete remaining release/UX work;
-5. leave signing/notarization as optional/client-funded unless requirements change.
+2. update `docs/progress.md`;
+3. update backlog with only concrete remaining Windows limitations;
+4. restore TASK-010 as active if it is still awaiting manual macOS E2E;
+5. do not automatically start Windows physical E2E;
+6. do not mark Windows as clean-machine verified without real human/native evidence.
 
 ## Status
 
-Blocked — requires manual clean-machine testing with real test mailboxes.
-
-Done (automated/package verification):
-
-- `pnpm verify` passes (192 tests).
-- A first real-mac test distribution (`v0.1.0-e2e.1`, ZIPs) failed on a Ventura
-  machine and succeeded on the developer's x86_64 Hackintosh; the failure was
-  investigated in TASK-010B (see `docs/e2e-macos.md` and ADR-015).
-- A corrected distribution (`v0.1.0-e2e.2`) now ships ad-hoc-signed,
-  architecture-specific **DMGs** with `SHA256SUMS.txt`:
-  - x86_64 `imapSyncGUI-0.1.0-mac-x64.dmg`
-    (`c8a1cc4d978a6c36324326c95faa103a3f7a76d3e046cbc685d35c4ebddd2ff9`);
-  - arm64 `imapSyncGUI-0.1.0-mac-arm64.dmg`
-    (`d956b55a13184f83e39cb20a3417abf80e29ead3203991baec1e23f2aa219f9f`).
-- Both DMGs pass `hdiutil verify`/`hdiutil attach` and packaged smoke tests;
-  the arm64 DMG is verified by native arm64 CI; both public DMGs were
-  re-downloaded from GitHub and independently checksum-verified.
-- `docs/e2e-macos.md` records the incident investigation, the two real test
-  attempts, the architecture-selection guidance, and a pre-test architecture
-  checklist that must be filled in before the next launch attempt.
-
-Remaining blocker (cannot be performed by the agent environment):
-
-- a clean macOS machine without developer tooling;
-- controlled test IMAP mailboxes (credentials);
-- an interactive manual session for the real connection-test/migration workflow.
-
-Per the task, this cannot be marked Complete without real clean/native E2E
-evidence, and no architecture is described as "clean-machine verified". The
-task remains blocked; `docs/e2e-macos.md` records the exact remaining steps.
+In progress.

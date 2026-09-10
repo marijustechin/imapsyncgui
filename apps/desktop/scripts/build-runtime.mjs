@@ -92,8 +92,11 @@ function main() {
 
   const manifest = {
     formatVersion: FORMAT_VERSION,
+    platform: 'darwin',
     architecture: runtimeArch,
     imapsyncVersion: IMAPSYNC_VERSION,
+    artifactFilename: 'imapsync',
+    artifactSha256: IMAPSYNC_BINARY_SHA256,
     perlVersion: '5.34 (embedded)',
     opensslVersion: 'embedded',
     builtAt: new Date().toISOString(),

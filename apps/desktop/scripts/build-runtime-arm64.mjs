@@ -10,7 +10,7 @@
 
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { chmodSync, copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -125,6 +125,9 @@ function main() {
   console.log('packing self-contained arm64 binary with pp')
   sh(brewPerl, [pp, '-x', '-u', '-o', join(binDir, 'imapsync'), scriptPath])
 
+  const binaryPath = join(binDir, 'imapsync')
+  const binarySha256 = sha256Hex(readFileSync(binaryPath))
+
   for (const license of LICENSE_FILES) {
     const source = join(licensesDir, license)
     if (existsSync(source)) {
@@ -134,8 +137,11 @@ function main() {
 
   const manifest = {
     formatVersion: 1,
+    platform: 'darwin',
     architecture: 'darwin-arm64',
     imapsyncVersion,
+    artifactFilename: 'imapsync',
+    artifactSha256: binarySha256,
     imapsyncScriptSha256: scriptSha256,
     perlVersion: `${perlVersion} (embedded via PAR::Packer)`,
     opensslVersion: 'embedded',

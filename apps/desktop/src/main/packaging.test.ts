@@ -7,6 +7,9 @@ import {
   MAC_TARGETS,
   PRODUCT_NAME,
   SUPPORTED_TARGET_ARCHES,
+  WINDOWS_TARGET_ARCHES,
+  windowsInstallerArtifactName,
+  WIN_TARGETS,
 } from './packaging'
 
 describe('packaging identity', () => {
@@ -60,5 +63,23 @@ describe('distributionArtifactNames', () => {
         expect(name).toContain(`mac-${arch}`)
       }
     }
+  })
+})
+
+describe('Windows packaging', () => {
+  it('targets only NSIS (no ZIP, no portable substitute)', () => {
+    expect(WIN_TARGETS).toEqual(['nsis'])
+  })
+
+  it('supports only Windows x64 (no arm64, no 32-bit)', () => {
+    expect(WINDOWS_TARGET_ARCHES).toEqual(['x64'])
+    expect(WINDOWS_TARGET_ARCHES).not.toContain('arm64')
+    expect(WINDOWS_TARGET_ARCHES).not.toContain('ia32')
+  })
+
+  it('names the installer with the Windows platform and x64 architecture', () => {
+    expect(windowsInstallerArtifactName('imapSyncGUI', '0.1.0', 'x64')).toBe(
+      'imapSyncGUI-0.1.0-windows-x64-setup.exe',
+    )
   })
 })

@@ -94,21 +94,30 @@ development and is resolved from the packaged application's resources directory
 
 Resolution is implemented in `apps/desktop/src/main/runtime/`:
 
-- `arch.ts` — `process.arch` → `darwin-x64` / `darwin-arm64`.
+- `arch.ts` — `(process.platform, process.arch)` → `darwin-x64` /
+  `darwin-arm64` / `win32-x64`, plus the platform-specific executable name
+  (`imapsync` on macOS, `imapsync.exe` on Windows).
 - `resolve.ts` — packaged vs development resolution.
-- `manifest.ts` — runtime manifest parsing/validation.
+- `manifest.ts` — runtime manifest parsing/validation (platform, architecture,
+  version, artifact filename + SHA-256, components).
 - `validate.ts` — filesystem-injectable runtime validation.
 - `errors.ts` — typed runtime failure codes and safe messages.
 - `env.ts` — deterministic, sanitized child-process environment.
 
-In packaged mode the adapter invokes the bundled self-contained `bin/imapsync`
-binary directly (no separate Perl, no `prefixArgs`), preserving shell-free
-`spawn` execution with a sanitized environment.
+In packaged mode the adapter invokes the bundled self-contained
+`bin/imapsync` (macOS) or `bin/imapsync.exe` (Windows) binary directly (no
+separate Perl, no `prefixArgs`), preserving shell-free `spawn` execution with a
+sanitized environment.
 
 ## Distribution packaging
 
 electron-builder (`electron-builder.config.cjs`) produces the distributable
-macOS artifacts:
+artifacts. The config derives the runtime directory from the build host
+platform (`process.platform` by default, overridable via `TARGET_PLATFORM`) and
+`TARGET_ARCH`, so packaging is native (a Windows build must run on Windows; no
+cross-compilation shortcut).
+
+macOS:
 
 - separate `--mac --x64` and `--mac --arm64` builds (no universal build);
 - `files: ['out/**/*', 'package.json']` → application code inside `app.asar`;
@@ -125,10 +134,22 @@ macOS artifacts:
   "damaged" by Gatekeeper (see ADR-015). This is not Developer ID signing and
   not notarization.
 
+Windows x64 (TASK-011):
+
+- a single `--win --x64` NSIS build (`target: ['nsis']`);
+- `extraResources` → `runtime/win32-x64` copied to
+  `resources/runtime/win32-x64` (outside ASAR, executable);
+- `artifactName: ${productName}-${version}-windows-${arch}-setup.${ext}` →
+  `imapSyncGUI-<version>-windows-x64-setup.exe`;
+- NSIS is configured as a per-user, assisted installer (`oneClick: false`,
+  `perMachine: false`, `allowToChangeInstallationDirectory: true`) — no
+  administrator privileges, Start Menu integration, normal uninstall support;
+- no signing is applied (unsigned; see ADR-017).
+
 Application identity (`com.imapsyncgui.desktop`, product name `imapSyncGUI`,
 version `0.1.0`) and packaging metadata live in
 `apps/desktop/package.json` / `src/main/packaging.ts`. Developer ID
-signing/notarization is a deferred follow-up.
+signing/notarization and Authenticode signing are deferred follow-ups.
 
 ## macOS architecture and distribution
 
@@ -169,6 +190,25 @@ The decision and its rationale are recorded in ADR-008.
 Ship separate x86_64 and arm64 application builds, each bundling a matching
 runtime, with no Rosetta 2 dependency. This is deferred implementation work
 (see TASK-008 and TASK-009).
+
+## Windows x64 architecture and distribution
+
+The Windows target is **x86_64 only** (Windows ARM64 and 32-bit are out of
+scope). The runtime is the official self-contained `imapsync.exe` (ADR-016),
+and the distribution is a single NSIS installer produced natively on a Windows
+x64 runner (ADR-017).
+
+### Runtime matrix
+
+| Platform | `process.arch` | runtime directory  | executable            |
+| -------- | -------------- | ------------------ | --------------------- |
+| darwin   | `x64`          | `darwin-x64`       | `bin/imapsync`        |
+| darwin   | `arm64`        | `darwin-arm64`     | `bin/imapsync`        |
+| win32    | `x64`          | `win32-x64`        | `bin/imapsync.exe`    |
+
+Any other platform/architecture combination is rejected explicitly with a typed
+`architecture-mismatch` failure at startup (packaged mode) and during runtime
+validation.
 
 ## Connection testing
 

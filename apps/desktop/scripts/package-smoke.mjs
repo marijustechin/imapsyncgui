@@ -3,6 +3,8 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { executableNameFor, expectedBinaryArchFor, isolationEnv, runtimeArchFromArgs } from './lib/runtime-arch.mjs'
+import { assertPeX64 } from './lib/winpe.mjs'
 
 const projectDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const releaseDir = join(projectDir, 'release')
@@ -20,7 +22,7 @@ function fail(message) {
   process.exit(1)
 }
 
-function findApp() {
+function findMacApp() {
   if (!existsSync(releaseDir)) return null
   for (const entry of readdirSync(releaseDir)) {
     const candidate = join(releaseDir, entry, 'imapSyncGUI.app')
@@ -29,27 +31,48 @@ function findApp() {
   return null
 }
 
-function isolationEnv() {
-  const env = { PATH: '/usr/bin:/bin:/usr/sbin', HOME: process.env.HOME ?? '/tmp' }
-  for (const key of ['PERL5LIB', 'PERL_LOCAL_LIB_ROOT', 'PERL_MB_OPT', 'PERL_MM_OPT', 'PERL5OPT']) {
-    delete env[key]
+function findWinUnpackedResources() {
+  if (!existsSync(releaseDir)) return null
+  const candidate = join(releaseDir, 'win-unpacked', 'resources')
+  if (existsSync(candidate)) return candidate
+  return null
+}
+
+function resourcesDirFor(runtimeArch) {
+  const resourcesArg = arg('--resources')
+  if (resourcesArg) {
+    const resolved = resolve(resourcesArg)
+    if (!existsSync(resolved)) fail(`resources path does not exist: ${resolved}`)
+    return resolved
   }
-  return env
+
+  const appArg = arg('--app')
+  if (appArg) {
+    const app = resolve(appArg)
+    if (!existsSync(app)) fail(`app path does not exist: ${app}`)
+    const resources = join(app, 'Contents', 'Resources')
+    if (!existsSync(resources)) fail(`app resources not found under: ${app}`)
+    return resources
+  }
+
+  if (runtimeArch === 'win32-x64') {
+    const resources = findWinUnpackedResources()
+    if (!resources) fail('no win-unpacked resources found under release/')
+    return resources
+  }
+
+  const app = findMacApp()
+  if (!app) fail(`no packaged .app found under ${releaseDir}`)
+  return join(app, 'Contents', 'Resources')
 }
 
 function main() {
-  const archArg = arg('--arch') ?? process.arch
-  const runtimeArch = archArg === 'x64' ? 'darwin-x64' : archArg === 'arm64' ? 'darwin-arm64' : null
-  if (runtimeArch === null) fail(`unsupported architecture: ${archArg}`)
+  const runtimeArch = runtimeArchFromArgs(process.argv)
+  if (runtimeArch === null) fail(`unsupported platform/architecture (resolve with --platform/--arch or --runtime-arch)`)
 
-  const appPathArg = arg('--app')
-  const app = appPathArg ? resolve(appPathArg) : findApp()
-  if (!app) fail(`no packaged .app found under ${releaseDir}`)
-  if (appPathArg && !existsSync(app)) fail(`app path does not exist: ${app}`)
-
-  const resources = join(app, 'Contents', 'Resources')
+  const resources = resourcesDirFor(runtimeArch)
   const runtimeDir = join(resources, 'runtime', runtimeArch)
-  console.log(`app: ${app}`)
+  console.log(`resources: ${resources}`)
   console.log(`runtime: ${runtimeDir}`)
 
   if (!existsSync(runtimeDir)) fail(`runtime directory is missing: ${runtimeDir}`)
@@ -68,13 +91,26 @@ function main() {
   }
   console.log(`manifest architecture: ${manifest.architecture} OK`)
 
-  const binary = join(runtimeDir, 'bin', 'imapsync')
-  if (!existsSync(binary)) fail('bundled imapsync binary is missing')
+  const executableName = executableNameFor(runtimeArch)
+  const binary = join(runtimeDir, 'bin', executableName)
+  if (!existsSync(binary)) fail(`bundled imapsync binary is missing: ${executableName}`)
 
-  const env = isolationEnv()
+  const env = isolationEnv(runtimeArch === 'win32-x64' ? 'win32' : 'darwin')
 
-  const fileOutput = execFileSync('file', [binary], { encoding: 'utf8', env }).trim()
-  console.log(`file: ${fileOutput}`)
+  if (runtimeArch === 'win32-x64') {
+    try {
+      const machine = assertPeX64(binary)
+      console.log(`PE machine: 0x${machine.toString(16)} (AMD64/x86-64)`)
+    } catch (error) {
+      fail(error instanceof Error ? error.message : 'bundled imapsync.exe is not AMD64')
+    }
+  } else {
+    const fileOutput = execFileSync('file', [binary], { encoding: 'utf8', env }).trim()
+    console.log(`file: ${fileOutput}`)
+    if (!fileOutput.includes(expectedBinaryArchFor(runtimeArch))) {
+      fail(`bundled binary is not ${expectedBinaryArchFor(runtimeArch)}`)
+    }
+  }
 
   const version = execFileSync(binary, ['--noreleasecheck', '--version'], {
     encoding: 'utf8',

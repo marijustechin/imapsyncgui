@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import type { RuntimeArch } from './arch'
+import { runtimeExecutableName, type RuntimeArch } from './arch'
 import { messageForRuntimeFailure, type RuntimeFailureCode } from './errors'
 import { manifestMatchesArch, parseRuntimeManifest } from './manifest'
 
@@ -31,7 +31,7 @@ export function validateRuntime(runtimeDir: string, arch: RuntimeArch, fs: Runti
     return { ok: false, code: 'architecture-mismatch', message: messageForRuntimeFailure('architecture-mismatch') }
   }
 
-  const scriptPath = join(runtimeDir, 'bin', 'imapsync')
+  const scriptPath = join(runtimeDir, 'bin', runtimeExecutableName(arch))
   if (!fs.exists(scriptPath)) {
     return { ok: false, code: 'runtime-invalid', message: messageForRuntimeFailure('runtime-invalid') }
   }

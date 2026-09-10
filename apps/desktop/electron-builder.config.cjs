@@ -1,5 +1,27 @@
+// TARGET_PLATFORM defaults to the build host platform so packaging is native
+// (no cross-compilation shortcut): a Windows build must run on Windows, and a
+// macOS build must run on macOS. It is overridable (e.g. in tests).
+const targetPlatform = process.env.TARGET_PLATFORM || process.platform
 const targetArch = process.env.TARGET_ARCH || 'x64'
-const runtimeArch = targetArch === 'arm64' ? 'darwin-arm64' : 'darwin-x64'
+
+function runtimeArchFor(platform, arch) {
+  if (platform === 'darwin') {
+    if (arch === 'arm64') return 'darwin-arm64'
+    if (arch === 'x64') return 'darwin-x64'
+    return null
+  }
+  if (platform === 'win32') {
+    if (arch === 'x64') return 'win32-x64'
+    return null
+  }
+  return null
+}
+
+const runtimeArch = runtimeArchFor(targetPlatform, targetArch)
+
+if (runtimeArch === null) {
+  throw new Error(`unsupported target platform/arch: ${targetPlatform}/${targetArch}`)
+}
 
 module.exports = {
   appId: 'com.imapsyncgui.desktop',
@@ -35,5 +57,21 @@ module.exports = {
       { x: 130, y: 220 },
       { x: 410, y: 220, type: 'link', path: '/Applications' },
     ],
+  },
+  win: {
+    // Windows x64 only (Windows ARM64 and 32-bit are out of scope). No
+    // signing identity is configured: the installer/application is unsigned
+    // (see ADR-017 and docs/security.md), so SmartScreen may warn on first
+    // run. See ADR-016 for the Windows runtime strategy.
+    target: ['nsis'],
+    artifactName: '${productName}-${version}-windows-${arch}-setup.${ext}',
+  },
+  nsis: {
+    // Conventional assisted installer with a directory-selection page,
+    // Start Menu integration, and normal uninstall support. Per-user install
+    // (no administrator privileges required). See ADR-016 / ADR-017.
+    oneClick: false,
+    perMachine: false,
+    allowToChangeInstallationDirectory: true,
   },
 }

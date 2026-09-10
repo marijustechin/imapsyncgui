@@ -38,4 +38,26 @@ describe('buildRuntimeEnvironment', () => {
     expect(JSON.stringify(env)).toContain('supersecret1')
     expect(env.PERL5LIB).toBeUndefined()
   })
+
+  it('preserves Windows system variables needed for executable operation', () => {
+    const base = {
+      SystemRoot: 'C:\\Windows',
+      WINDIR: 'C:\\Windows',
+      TEMP: 'C:\\Users\\test\\AppData\\Local\\Temp',
+      TMP: 'C:\\Users\\test\\AppData\\Local\\Temp',
+      PATH: 'C:\\Windows\\system32;C:\\Windows',
+      ComSpec: 'C:\\Windows\\system32\\cmd.exe',
+      PATHEXT: '.COM;.EXE;.BAT;.CMD',
+      PROCESSOR_ARCHITECTURE: 'AMD64',
+    }
+    const env = buildRuntimeEnvironment(base, { password1: 'a', password2: 'b' })
+    expect(env.SystemRoot).toBe('C:\\Windows')
+    expect(env.WINDIR).toBe('C:\\Windows')
+    expect(env.TEMP).toBe('C:\\Users\\test\\AppData\\Local\\Temp')
+    expect(env.TMP).toBe('C:\\Users\\test\\AppData\\Local\\Temp')
+    expect(env.PATH).toBe('C:\\Windows\\system32;C:\\Windows')
+    expect(env.ComSpec).toBe('C:\\Windows\\system32\\cmd.exe')
+    expect(env.PATHEXT).toBe('.COM;.EXE;.BAT;.CMD')
+    expect(env.PROCESSOR_ARCHITECTURE).toBe('AMD64')
+  })
 })

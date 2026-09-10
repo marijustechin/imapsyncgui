@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "description": "Desktop application for migrating email between IMAP servers.",
+  "author": "imapSyncGUI contributors",
+  "license": "UNLICENSED",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -13,10 +15,12 @@
     "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "runtime:build": "node scripts/build-runtime.mjs",
     "runtime:build:arm64": "node scripts/build-runtime-arm64.mjs",
+    "runtime:build:win": "node scripts/build-runtime-win.mjs",
     "runtime:validate": "node scripts/validate-runtime.mjs",
     "runtime:self-test": "node scripts/self-test-runtime.mjs",
     "package:mac:x64": "TARGET_ARCH=x64 electron-builder --mac --x64 --config electron-builder.config.cjs",
     "package:mac:arm64": "TARGET_ARCH=arm64 electron-builder --mac --arm64 --config electron-builder.config.cjs",
+    "package:win:x64": "electron-builder --win --x64 --config electron-builder.config.cjs",
     "package:smoke": "node scripts/package-smoke.mjs"
   },
   "dependencies": {

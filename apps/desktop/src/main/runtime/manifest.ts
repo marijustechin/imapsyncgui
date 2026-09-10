@@ -1,4 +1,4 @@
-import type { RuntimeArch } from './arch'
+import { platformForRuntimeArch, type RuntimeArch, type RuntimePlatform } from './arch'
 
 export const RUNTIME_MANIFEST_FORMAT_VERSION = 1
 
@@ -11,8 +11,11 @@ export interface RuntimeComponent {
 
 export interface RuntimeManifest {
   formatVersion: number
+  platform: RuntimePlatform
   architecture: RuntimeArch
   imapsyncVersion: string
+  artifactFilename: string
+  artifactSha256: string
   perlVersion: string | null
   builtAt: string | null
   components: RuntimeComponent[]
@@ -22,8 +25,12 @@ export type ManifestParseResult =
   | { ok: true; manifest: RuntimeManifest }
   | { ok: false; error: string }
 
+function isRuntimePlatform(value: unknown): value is RuntimePlatform {
+  return value === 'darwin' || value === 'win32'
+}
+
 function isRuntimeArch(value: unknown): value is RuntimeArch {
-  return value === 'darwin-x64' || value === 'darwin-arm64'
+  return value === 'darwin-x64' || value === 'darwin-arm64' || value === 'win32-x64'
 }
 
 function parseComponent(value: unknown): RuntimeComponent | null {
@@ -62,11 +69,23 @@ export function parseRuntimeManifest(json: string): ManifestParseResult {
   if (record.formatVersion !== RUNTIME_MANIFEST_FORMAT_VERSION) {
     return { ok: false, error: 'unsupported manifest format version' }
   }
+  if (!isRuntimePlatform(record.platform)) {
+    return { ok: false, error: 'invalid or missing platform' }
+  }
   if (!isRuntimeArch(record.architecture)) {
     return { ok: false, error: 'invalid or missing architecture' }
   }
+  if (record.platform !== platformForRuntimeArch(record.architecture)) {
+    return { ok: false, error: 'platform does not match architecture' }
+  }
   if (typeof record.imapsyncVersion !== 'string' || record.imapsyncVersion.length === 0) {
     return { ok: false, error: 'missing imapsync version' }
+  }
+  if (typeof record.artifactFilename !== 'string' || record.artifactFilename.length === 0) {
+    return { ok: false, error: 'missing artifact filename' }
+  }
+  if (typeof record.artifactSha256 !== 'string' || record.artifactSha256.length === 0) {
+    return { ok: false, error: 'missing artifact SHA-256' }
   }
   if (!Array.isArray(record.components)) {
     return { ok: false, error: 'components must be an array' }
@@ -85,8 +104,11 @@ export function parseRuntimeManifest(json: string): ManifestParseResult {
     ok: true,
     manifest: {
       formatVersion: RUNTIME_MANIFEST_FORMAT_VERSION,
+      platform: record.platform,
       architecture: record.architecture,
       imapsyncVersion: record.imapsyncVersion,
+      artifactFilename: record.artifactFilename,
+      artifactSha256: record.artifactSha256,
       perlVersion: typeof record.perlVersion === 'string' ? record.perlVersion : null,
       builtAt: typeof record.builtAt === 'string' ? record.builtAt : null,
       components,

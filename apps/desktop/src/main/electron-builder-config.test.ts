@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 interface BuilderMacConfig {
   category: string
@@ -14,6 +14,17 @@ interface BuilderDmgConfig {
   contents: { x: number; y: number; type?: string; path?: string }[]
 }
 
+interface BuilderWinConfig {
+  target: string[]
+  artifactName: string
+}
+
+interface BuilderNsisConfig {
+  oneClick: boolean
+  perMachine: boolean
+  allowToChangeInstallationDirectory: boolean
+}
+
 interface BuilderConfig {
   appId: string
   productName: string
@@ -22,12 +33,43 @@ interface BuilderConfig {
   asar: boolean
   mac: BuilderMacConfig
   dmg: BuilderDmgConfig
+  win: BuilderWinConfig
+  nsis: BuilderNsisConfig
 }
 
 const require = createRequire(import.meta.url)
-const config = require('../../electron-builder.config.cjs') as BuilderConfig
 
-describe('electron-builder configuration', () => {
+function loadConfig(env: Record<string, string> = {}): BuilderConfig {
+  const previous: Record<string, string | undefined> = {}
+  for (const key of ['TARGET_PLATFORM', 'TARGET_ARCH']) {
+    previous[key] = process.env[key]
+    if (env[key] !== undefined) {
+      process.env[key] = env[key]
+    } else {
+      delete process.env[key]
+    }
+  }
+  const configPath = require.resolve('../../electron-builder.config.cjs')
+  delete require.cache[configPath]
+  const loaded = require('../../electron-builder.config.cjs') as BuilderConfig
+  for (const key of ['TARGET_PLATFORM', 'TARGET_ARCH']) {
+    if (previous[key] === undefined) {
+      delete process.env[key]
+    } else {
+      process.env[key] = previous[key]
+    }
+  }
+  return loaded
+}
+
+afterEach(() => {
+  delete process.env.TARGET_PLATFORM
+  delete process.env.TARGET_ARCH
+})
+
+describe('electron-builder configuration (macOS)', () => {
+  const config = loadConfig({ TARGET_PLATFORM: 'darwin', TARGET_ARCH: 'x64' })
+
   it('produces DMG (primary) and ZIP (secondary) targets', () => {
     expect(config.mac.target).toEqual(['dmg', 'zip'])
   })
@@ -54,6 +96,34 @@ describe('electron-builder configuration', () => {
     expect(config.files).toEqual(['out/**/*', 'package.json'])
     expect(config.extraResources).toEqual([
       { from: 'runtime/darwin-x64', to: 'runtime/darwin-x64' },
+    ])
+  })
+})
+
+describe('electron-builder configuration (Windows)', () => {
+  const config = loadConfig({ TARGET_PLATFORM: 'win32', TARGET_ARCH: 'x64' })
+
+  it('targets NSIS only', () => {
+    expect(config.win.target).toEqual(['nsis'])
+  })
+
+  it('names the installer with the Windows platform and architecture', () => {
+    expect(config.win.artifactName).toContain('${arch}')
+    expect(config.win.artifactName).toContain('windows')
+    expect(config.win.artifactName).toContain('setup')
+  })
+
+  it('uses a per-user, assisted installer without elevated privileges', () => {
+    expect(config.nsis.oneClick).toBe(false)
+    expect(config.nsis.perMachine).toBe(false)
+    expect(config.nsis.allowToChangeInstallationDirectory).toBe(true)
+  })
+
+  it('bundles the win32-x64 runtime outside ASAR', () => {
+    expect(config.asar).toBe(true)
+    expect(config.files).toEqual(['out/**/*', 'package.json'])
+    expect(config.extraResources).toEqual([
+      { from: 'runtime/win32-x64', to: 'runtime/win32-x64' },
     ])
   })
 })

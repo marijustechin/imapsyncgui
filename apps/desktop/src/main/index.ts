@@ -56,6 +56,7 @@ function createAdapter(): MigrationAdapter {
   const resolution = resolveAndValidateRuntime(
     {
       isPackaged: app.isPackaged,
+      platform: process.platform,
       arch: process.arch,
       env: process.env,
       resourcesPath: process.resourcesPath,

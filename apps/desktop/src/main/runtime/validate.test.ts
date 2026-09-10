@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { RUNTIME_MANIFEST_FORMAT_VERSION } from './manifest'
 import { validateRuntime, type RuntimeFs } from './validate'
@@ -10,10 +11,14 @@ function makeFs(entries: Record<string, string>): RuntimeFs {
 }
 
 function makeManifest(architecture: string): string {
+  const platform = architecture === 'win32-x64' ? 'win32' : 'darwin'
   return JSON.stringify({
     formatVersion: RUNTIME_MANIFEST_FORMAT_VERSION,
+    platform,
     architecture,
     imapsyncVersion: '2.314',
+    artifactFilename: architecture === 'win32-x64' ? 'imapsync.exe' : 'imapsync',
+    artifactSha256: 'b'.repeat(64),
     perlVersion: '5.34.1',
     builtAt: null,
     components: [],
@@ -78,6 +83,45 @@ describe('validateRuntime', () => {
     expect(validateRuntime(runtimeDir, 'darwin-x64', fs)).toEqual({
       ok: false,
       code: 'runtime-invalid',
+      message: expect.any(String),
+    })
+  })
+})
+
+describe('validateRuntime (win32-x64)', () => {
+  const winRuntimeDir = join('C:\\resources', 'runtime', 'win32-x64')
+
+  it('accepts a complete win32-x64 runtime with imapsync.exe', () => {
+    const fs = makeFs({
+      [winRuntimeDir]: '',
+      [join(winRuntimeDir, 'manifest.json')]: makeManifest('win32-x64'),
+      [join(winRuntimeDir, 'bin', 'imapsync.exe')]: '',
+    })
+    expect(validateRuntime(winRuntimeDir, 'win32-x64', fs)).toEqual({ ok: true })
+  })
+
+  it('rejects a win32 runtime missing imapsync.exe', () => {
+    const fs = makeFs({
+      [winRuntimeDir]: '',
+      [join(winRuntimeDir, 'manifest.json')]: makeManifest('win32-x64'),
+      [join(winRuntimeDir, 'bin', 'imapsync')]: '',
+    })
+    expect(validateRuntime(winRuntimeDir, 'win32-x64', fs)).toEqual({
+      ok: false,
+      code: 'runtime-invalid',
+      message: expect.any(String),
+    })
+  })
+
+  it('rejects a win32 runtime whose manifest declares a darwin architecture', () => {
+    const fs = makeFs({
+      [winRuntimeDir]: '',
+      [join(winRuntimeDir, 'manifest.json')]: makeManifest('darwin-x64'),
+      [join(winRuntimeDir, 'bin', 'imapsync.exe')]: '',
+    })
+    expect(validateRuntime(winRuntimeDir, 'win32-x64', fs)).toEqual({
+      ok: false,
+      code: 'architecture-mismatch',
       message: expect.any(String),
     })
   })

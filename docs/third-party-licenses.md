@@ -11,6 +11,12 @@ upstream `imapsync` script (2.324 at build time), the current Homebrew `perl`
 (5.42 at build time), and OpenSSL 3; exact versions are recorded in the runtime
 manifest.
 
+The Windows x64 runtime is the official upstream `imapsync.exe` from the free
+`imapsync_2.314.zip` archive (ADR-016): a PE32+ x86-64 console executable that
+embeds Perl, the required CPAN modules, and the OpenSSL stack via PAR::Packer.
+Exact versions are embedded by the upstream binary and recorded in the runtime
+manifest.
+
 ## Components
 
 | Component | x86_64 version | arm64 version | Source | License |

@@ -77,19 +77,25 @@ documented trade-off against the no-on-disk rule.
 ## Runtime resolution
 
 In a packaged application, `imapsync` is resolved only from the bundled
-per-architecture runtime (`<resources>/runtime/<arch>`); the `IMAPSYNC_EXECUTABLE`
-override and `PATH` are ignored, so a packaged build never falls back to
-host-installed `imapsync` or system Perl. The bundled runtime is validated
-before use (directory, manifest, architecture, and the self-contained binary)
-and failures are mapped to safe application-level messages that never leak
-internal paths, environment dumps, or loader diagnostics.
+per-architecture runtime (`<resources>/runtime/<arch>` — `darwin-x64` /
+`darwin-arm64` / `win32-x64`); the `IMAPSYNC_EXECUTABLE` override and `PATH`
+are ignored, so a packaged build never falls back to host-installed `imapsync`
+or system/Strawberry Perl. On Windows the executable is `bin/imapsync.exe`
+instead of `bin/imapsync`. The bundled runtime is validated before use
+(directory, manifest — including platform, architecture, artifact filename and
+SHA-256 — and the self-contained binary) and failures are mapped to safe
+application-level messages that never leak internal paths, environment dumps,
+or loader diagnostics.
 
-The self-contained runtime is the official `imapsync` binary (ADR-012); it
-links only system `libSystem` and embeds its own Perl, modules, and OpenSSL.
-The child-process environment is constructed deterministically in
+The self-contained runtime is the official `imapsync` binary on macOS x86_64
+(ADR-012) and Windows x64 (ADR-016), and a self-built PAR::Packer binary on
+macOS arm64 (ADR-013); it embeds its own Perl, modules, and OpenSSL. The
+child-process environment is constructed deterministically in
 `src/main/runtime/env.ts`, which removes developer Perl configuration
-(`PERL5LIB`, `PERL_LOCAL_LIB_ROOT`, `PERL_MB_OPT`, `PERL_MM_OPT`, `PERL5OPT`)
-and adds only the ADR-007 credential variables.
+(`PERL5LIB`, `PERL_LOCAL_LIB_ROOT`, `PERL_MB_OPT`, `PERL_MM_OPT`, `PERL5OPT`,
+`PERL6LIB`) and adds only the ADR-007 credential variables. On Windows the
+inherited environment is otherwise preserved so system temp resolution, TLS,
+DNS, networking, and Windows system DLL resolution continue to work.
 
 ## Current state
 
@@ -162,9 +168,23 @@ allow the app to run, and this must not be worked around by disabling macOS
 security mechanisms. Developer ID signing and notarization are a deferred
 follow-up task (see `tasks/backlog.md`). See ADR-015.
 
+### Windows code signing and SmartScreen
+
+The Windows NSIS installer and the installed application are **unsigned**: no
+Authenticode certificate is applied (ADR-017). Microsoft Defender SmartScreen
+is expected to warn about an unsigned installer/app on first run ("unknown
+publisher"). This is a known distribution limitation, separate from malware
+detection, and must not be bypassed by disabling Defender/SmartScreen or by
+instructing users to disable Windows security. The installer does not request
+administrator privileges (per-user install, `perMachine: false`).
+
+Proper Authenticode signing is deferred, optional, client-funded release
+hardening (mirroring the macOS Developer ID/notarization deferral).
+
 ## Packaged runtime
 
 In a packaged build the application resolves and launches only the bundled
-architecture-matched runtime under `Contents/Resources/runtime/<arch>`; it never
-falls back to `PATH`, `IMAPSYNC_EXECUTABLE`, Homebrew, or system Perl. Runtime
+architecture-matched runtime — `Contents/Resources/runtime/<arch>` on macOS,
+`resources/runtime/<arch>` on Windows; it never falls back to `PATH`,
+`IMAPSYNC_EXECUTABLE`, Homebrew, Strawberry Perl, or system Perl. Runtime
 validation runs before migration start and reports safe, non-leaking failures.
