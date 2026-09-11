@@ -1,458 +1,515 @@
-# TASK-014 — Fix macOS arm64 SSL runtime portability and align migration UX with Windows
+# TASK-010 — Clean-machine end-to-end verification
+
+> **Status: Active — awaiting manual physical macOS E2E.**
+>
+> This is the single active task. TASK-011 (Windows x64 support), TASK-012
+> (migration UX + live log streaming), TASK-013 (Windows packaging runtime
+> hardening), and TASK-014 (macOS arm64 SSL runtime portability + migration
+> failure UX) are Complete and archived in `tasks/done/`. TASK-010 remains
+> **not** Complete pending a real clean-machine macOS E2E run with controlled
+> test mailboxes.
 
 ## Goal
 
-Resolve the real-world macOS Apple Silicon migration failure discovered during
-clean-machine testing and bring the macOS migration feedback/UX in line with
-the recently improved Windows behavior.
+Verify the complete macOS user workflow on a clean compatible system using the actual packaged application artifacts.
 
-This is a release-blocking task.
+This task validates the product as a user would experience it.
 
-Do not apply a workaround that requires the end user to install Homebrew,
-OpenSSL, Perl, imapsync, Rosetta, or developer tooling.
+Signing and notarization are explicitly out of scope for this task.
 
----
+Unsigned Gatekeeper behavior must be documented honestly and treated as an expected distribution limitation, not as an application failure.
 
-## Real-world evidence
+## Context
 
-Testing was performed on Eimantas's Mac.
+The project now has:
 
-### Case A — succeeded
+- complete renderer migration workflow;
+- correct IMAP STARTTLS behavior;
+- real IMAP connection testing;
+- migration start / streaming / cancellation / result UX;
+- lifecycle race protection;
+- explicit `imapsync --nolog` policy;
+- controlled temp/work directory behavior;
+- proven self-contained x86_64 runtime;
+- proven self-contained arm64 runtime;
+- architecture-specific packaged applications;
+- native arm64 CI verification;
+- packaged runtime smoke tests;
+- no end-user Homebrew/system Perl dependency.
 
-Mailbox:
+Remaining known release limitation:
 
-eimantas@textradeuk.co.uk
+- application artifacts are unsigned and not notarized because no Apple Developer Program credentials are currently available.
 
-The migration completed successfully.
+## Definition of clean machine
 
-### Case B — failed
+A clean-machine verification environment must not depend on the development repository or development runtime.
 
-Source:
+The target system must not require:
 
-info@alfasis.lt@dracena.serveriai.lt
+- Node.js;
+- pnpm;
+- Homebrew;
+- MacPorts;
+- Perl installation;
+- `imapsync` installation;
+- repository source files;
+- developer build output outside the packaged application.
 
-Destination:
+Testing on a normal user account is preferred.
 
-info@alfasis.lt@space-hosting-node-001.bacloud.online
+Do not configure the machine to imitate the developer workstation.
 
-The application launched normally and the connection tests succeeded, but the
-actual migration failed with exit code 2.
+## Architectures
 
-Observed runtime failure:
+Verify at least every architecture currently claimed as supported.
 
-    Can't load .../Net/SSLeay/SSLeay.bundle for module Net::SSLeay
+### x86_64
 
-and:
+Test the Intel artifact on a compatible Intel macOS system.
 
-    Library not loaded:
-    /opt/homebrew/opt/openssl@3/lib/libssl.3.dylib
+### arm64
 
-The failing component is extracted by PAR::Packer into a temporary `par-...`
-directory.
+Test the Apple Silicon artifact on a compatible native Apple Silicon macOS system.
 
-This means the current arm64 packaged runtime is not fully relocatable for all
-real migration code paths.
+Do not use Rosetta as proof of arm64 support.
 
-Important:
+If clean physical hardware is unavailable for one architecture, use the strongest realistic native environment available and document the limitation precisely.
 
-The successful textradeuk migration proves that the packaged application and
-arm64 runtime are not universally broken.
+Do not claim a clean-machine test occurred when only CI packaging/runtime smoke tests were performed.
 
-Investigate why one real migration succeeds while another enters an SSL/TLS
-code path that exposes the Homebrew OpenSSL dependency.
+## Test artifact
 
-Do not assume the two migrations exercised the same runtime/module path.
+Use the actual produced distribution artifact.
 
----
+Do not:
 
-# Part 1 — Reproduce and understand the difference
+- run `pnpm dev`;
+- launch the unpackaged app;
+- substitute staging runtime files;
+- modify the `.app` contents after packaging;
+- install runtime dependencies manually.
 
-## Required investigation
+Record:
 
-Determine why:
+- application version;
+- artifact filename;
+- architecture;
+- commit/release identifier;
+- artifact SHA-256 where practical.
 
-- `eimantas@textradeuk.co.uk` migration succeeds;
-- `info@alfasis.lt` migration fails while loading `Net::SSLeay`.
+## Download / transfer simulation
 
-Inspect, without exposing credentials:
+Test the artifact through a realistic user-distribution path where possible.
 
-- source security mode;
-- destination security mode;
-- ports;
-- whether implicit TLS / STARTTLS / plaintext differ;
-- which imapsync Perl modules are loaded in each scenario;
-- whether Net::SSLeay is loaded lazily only on the failing path;
-- whether one server causes SSL/TLS negotiation behavior not exercised by the
-  successful migration.
+For example:
 
-Do not infer the answer from server names alone.
+- download from GitHub Actions artifact/release;
+- transfer the `.zip` / selected distribution archive to the clean machine;
+- extract normally.
 
-Use controlled tests or fixtures where possible.
+Avoid testing only the exact local build directory copy if that bypasses quarantine/Gatekeeper behavior.
 
-Do not commit or log real mailbox passwords.
+## Gatekeeper / unsigned behavior
 
-## Expected outcome
+The application is currently unsigned and not notarized.
 
-Document exactly why the existing automated/native smoke tests allowed the
-faulty runtime to pass.
+Document exactly what macOS does on first launch.
 
-Most likely verification gap to confirm or reject:
+Expected possibilities include:
 
-- the main PAR executable was inspected;
-- but native modules embedded/extracted by PAR were not fully inspected;
-- and the smoke/self-test did not exercise the SSL-dependent path that loads
-  `Net::SSLeay::SSLeay.bundle`.
+- normal launch blocked;
+- warning about unidentified/unverified developer;
+- requirement to use macOS Privacy & Security / Open Anyway;
+- context-menu Open behavior depending on macOS version.
 
-Do not state this as fact until verified.
+Do not:
 
----
+- disable Gatekeeper globally;
+- run undocumented `xattr` removal as the normal user workflow;
+- tell users to disable macOS security;
+- describe the unsigned warning as a virus detection;
+- mark expected unsigned Gatekeeper behavior as an application defect.
 
-# Part 2 — Fix the arm64 runtime
+Document the minimum normal macOS user action required to launch the application.
 
-## Requirement
+## Application startup
 
-The macOS arm64 packaged runtime must work without any runtime dependency on:
+After the user completes any expected unsigned-app approval flow:
 
-- `/opt/homebrew`;
-- `/usr/local/Cellar`;
-- `/opt/local`;
-- Homebrew OpenSSL;
-- system Perl;
-- developer CPAN paths;
-- developer-machine build directories;
-- Rosetta;
-- user-installed runtime dependencies.
+Verify:
 
-## Specifically fix
+- application launches;
+- renderer loads correctly;
+- no terminal is required;
+- no missing runtime error appears;
+- no Homebrew/system Perl prompt appears;
+- no crash occurs.
 
-The runtime currently contains or extracts:
+## Runtime isolation verification
 
-`Net::SSLeay::SSLeay.bundle`
+On the clean machine, confirm the app performs runtime preflight successfully.
 
-which references:
+The user must not need to know where `imapsync` or Perl lives.
 
-`/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib`
+Where practical verify that:
 
-Resolve this properly.
+- `imapsync` is not installed globally;
+- Homebrew is absent or irrelevant;
+- system Perl is not used by the application.
 
-Acceptable strategies include:
+Do not modify the clean system merely to satisfy the test.
 
-1. build/link Net::SSLeay against bundled relocatable OpenSSL;
-2. bundle required libssl/libcrypto and rewrite Mach-O references using
-   `@loader_path` / `@rpath`;
-3. produce a PAR::Packer artifact in which SSL dependencies are genuinely
-   self-contained;
-4. another reproducible solution that satisfies the same portability proof.
+## Real IMAP connection test
 
-Do not solve this by:
+Use controlled test mailboxes.
 
-- installing Homebrew on the target Mac;
-- adding `/opt/homebrew` to PATH;
-- depending on the CI runner's Homebrew installation;
-- falling back to system Perl/OpenSSL;
-- using Rosetta;
-- suppressing the error.
+Do not use production/customer credentials for verification unless explicitly authorized.
 
----
+Create or use test accounts containing non-sensitive mail.
 
-# Part 3 — Strengthen native artifact validation
+Verify source connection testing for:
 
-Current validation is insufficient if it only inspects the top-level
-`imapsync` executable.
+- host;
+- port;
+- selected security mode;
+- authentication.
 
-Add validation for native components embedded inside the PAR artifact.
+Verify destination connection testing likewise.
 
-## Validation must inspect
+At minimum perform a real TLS-based scenario.
 
-At minimum:
+If STARTTLS is relevant to supported deployments, perform one real STARTTLS server verification as well.
 
-- `Net::SSLeay::SSLeay.bundle`;
-- all Mach-O `.bundle` files;
-- all bundled/extracted `.dylib` files;
-- other native Perl modules included by PAR.
+Do not rely only on mocks for this task.
 
-Where technically appropriate, extract/unpack the PAR artifact during CI and
-inspect its native contents.
+## Failed authentication test
 
-For every native component, check:
+Enter an intentionally incorrect password for a test account.
 
-- architecture is `arm64`;
-- `otool -L` dependencies;
-- no build-machine-only library references;
-- no Homebrew runtime references.
+Verify:
 
-CI must fail if any runtime dependency contains paths such as:
+- authentication test fails clearly;
+- no password is shown in the UI;
+- no raw stack trace appears;
+- the application remains usable afterward.
 
-    /opt/homebrew
-    /usr/local/Cellar
-    /opt/local
-    /Users/
-    runner build/cache paths
+Then correct the password and verify recovery.
 
-unless a path is explicitly documented as a normal macOS system dependency.
+## Real migration test
 
-Do not rely only on:
+Perform an actual small mailbox migration between controlled test accounts.
 
-    otool -L imapsync
+Prepare a source mailbox with a deterministic small dataset.
 
----
+For example, include:
 
-# Part 4 — Strengthen runtime self-test
+- several normal messages;
+- nested folders if supported by the current migration behavior;
+- messages with attachments;
+- Unicode subject/sender/folder data where practical.
 
-The arm64 smoke/self-test must exercise the SSL stack actually required by real
-mailbox migration.
+Do not use a huge mailbox for the initial E2E proof.
 
-It must prove offline, where possible:
+Record the expected test dataset.
 
-- `Net::SSLeay` loads;
-- `IO::Socket::SSL` loads;
-- OpenSSL library resolution succeeds;
-- the runtime does not fall back to Homebrew/system dependencies;
-- the process executes natively as arm64.
+## Migration workflow
 
-The test environment must deliberately remove developer conveniences.
+Verify the complete user path:
 
-At minimum:
+1. enter source endpoint;
+2. enter destination endpoint;
+3. test source connection;
+4. test destination connection;
+5. start migration;
+6. observe streamed output;
+7. reach terminal success state;
+8. return to the form.
 
-- restricted PATH;
-- cleared Perl-related environment variables;
-- no runtime reliance on Homebrew paths;
-- no Rosetta/x64 fallback.
+Confirm that no terminal or external tool is required.
 
-If an offline module-loading test is sufficient to exercise this dependency,
-prefer it over using real mailbox credentials.
+## Migration correctness
 
----
+After migration, inspect the destination mailbox using an independent mail client/webmail where practical.
 
-# Part 5 — Real migration regression coverage
+Verify at minimum:
 
-Add a deterministic regression test representing the distinction discovered
-in production testing.
+- expected folders exist;
+- expected messages arrived;
+- attachments are present;
+- message subjects/content are intact;
+- Unicode test data survives;
+- no obvious unexpected duplication occurred.
 
-We need coverage for migration configurations that exercise:
+Do not claim full imapsync semantic correctness from a tiny test dataset.
 
-- plain/connection path already known to work;
-- TLS-dependent path that loads Net::SSLeay;
-- STARTTLS path where applicable.
+This task proves the supported user workflow, not every possible IMAP edge case.
 
-Do not require real external mailbox credentials in `pnpm verify`.
+## Repeat migration flow
 
-Native CI may use only credential-free runtime tests unless explicit safe test
-accounts already exist in project infrastructure.
+Use the application's "Start another migration" flow.
 
----
+Verify:
 
-# Part 6 — macOS migration UX improvements
+- previous output is cleared;
+- previous success state is cleared;
+- endpoint values may remain;
+- connection tests are no longer trusted;
+- fresh connection tests are required;
+- second migration can start normally.
 
-Align macOS migration feedback with the recent Windows UX improvements.
+## Cancellation E2E
 
-The current failed-migration screen is not acceptable for an end user because
-the dominant UI exposes a large Perl/module loader stack trace.
+Perform a controlled migration long enough to exercise cancellation if practical.
 
-The product already distinguishes success / failure / cancellation and keeps
-diagnostic output available separately. Preserve that model.
+Verify:
 
-## Running migration view
+- cancel action is available;
+- UI enters cancelling state;
+- output remains visible;
+- process stops;
+- final state is cancellation, not failure.
 
-Make the migration screen clearly show:
+Do not claim rollback.
 
-- source mailbox;
-- destination mailbox;
-- current migration state;
-- useful user-facing progress/feedback;
-- cancel action;
-- diagnostic details separately.
+Document what remains in the destination mailbox after cancellation if observable.
 
-Preserve incremental output ordering and the existing bounded output behavior.
+## Failure E2E
 
-Do not infer authoritative completion from log text.
+Trigger at least one safe real migration failure where practical.
 
-Runtime lifecycle remains authoritative.
+Examples:
 
-## Failure view
+- unreachable test host;
+- deliberately invalid destination authentication before migration;
+- controlled runtime-unavailable fixture only if this can be done without altering the release artifact.
 
-The primary failure message must be concise and user-facing.
+Verify:
 
-For a runtime dependency failure similar to the observed case, use an
-application-level message conceptually like:
+- safe user-facing message;
+- no stack trace;
+- no internal path leakage;
+- app can recover to another migration attempt.
 
-    Migration could not start correctly because the bundled migration runtime
-    failed to load a required component.
+Do not corrupt the actual release runtime solely to manufacture a failure unless testing from a disposable copy.
 
-or a better concise equivalent.
+## Persistent-file inspection
 
-Do not show as the primary error:
+After connection tests and migrations, inspect normal user-accessible locations for unexpected application/runtime residue.
 
-- Perl stack traces;
-- absolute filesystem paths;
-- `/opt/homebrew/...`;
-- PAR cache paths;
-- environment values;
-- raw loader diagnostics.
+Specifically verify that the app does not leave uncontrolled:
 
-The existing sanitized diagnostic output may remain available in a clearly
-secondary section such as:
+- `LOG_imapsync/`;
+- `W/`;
+- repository-style temp folders;
+- plaintext credential files.
 
-    Technical details
+Controlled OS temporary files may exist transiently.
 
-Prefer a collapsed/secondary diagnostic presentation if that matches the
-recent Windows implementation.
+Document any persistent application files that are intentionally created.
 
-Do not remove useful diagnostics entirely.
+## Credential hygiene
 
-## Exit-code handling
+During E2E verification, inspect:
 
-Do not present only:
+- application UI;
+- diagnostic output;
+- streamed migration output;
+- normal logs;
+- obvious process invocation where practical.
 
-    Migration exited with code 2.
+Verify passwords do not appear.
 
-Exit code may appear in technical details, but the main message must map to a
-stable application-level category.
+Do not include real passwords in screenshots, CI logs, task documentation, or bug reports.
 
-Introduce/refine typed categories only where the runtime can classify them
-reliably.
+## Network/security behavior
 
-At minimum review whether the current contract can distinguish:
+Verify TLS certificate validation remains enabled.
 
-- bundled runtime invalid/unusable;
-- runtime dependency loading failure;
-- migration process failure;
-- connection/authentication-related failure;
-- cancellation;
-- unexpected internal failure.
+Do not bypass certificate verification merely to make a test server work.
 
-Do not parse arbitrary free-form imapsync logs to invent unreliable
-classifications.
+If using a test server with invalid/self-signed certificates, treat rejection as correct behavior unless product requirements explicitly support custom trust.
 
-## Success UX
+## Offline/runtime behavior
 
-Preserve the improved Windows-style completion feedback:
+After the application has been downloaded/extracted, no network access should be required merely to load the bundled runtime.
 
-- clear success heading;
-- safe source/destination identity;
-- completed state;
-- action to start another migration;
-- diagnostics/details remain secondary.
+The actual migration naturally requires network connectivity to the IMAP servers.
 
-Do not claim migrated message counts or bytes unless supplied by a typed,
-reliable runtime result.
+Do not confuse runtime self-containment with offline email migration.
 
-## Retry / start another migration
+## User-facing usability notes
 
-After failure or success:
+Record obvious user-facing issues encountered during the test.
 
-- allow returning to the migration form;
-- keep endpoint field values where useful;
-- invalidate old successful connection tests;
-- require fresh connection tests before a new migration;
-- clear previous runtime/result state;
-- prevent old output/listeners from contaminating the next migration.
+Only fix small release-blocking defects discovered during E2E.
 
----
+Do not expand this task into a redesign.
 
-# Part 7 — Packaging/release regression protection
+If a larger UX issue is found:
 
-Preserve all existing guarantees:
+- record it in backlog;
+- keep TASK-010 focused.
 
-- no shell execution;
-- passwords outside argv;
-- narrow preload IPC;
-- no credential persistence;
-- sanitized renderer output;
-- controlled imapsync logging/temp paths;
-- no PATH fallback in packaged mode;
-- no Rosetta;
-- architecture-specific macOS builds.
+## Architecture-specific differences
 
-Do not regress x86_64 behavior while fixing arm64.
+Record any behavior difference between x86_64 and arm64.
 
-The x86_64 runtime must remain unchanged unless a shared validation improvement
-requires a harmless adjustment.
+Expected application behavior should be equivalent.
 
----
+Architecture-specific packaging/runtime internals must not leak into normal user UX.
 
-# Verification
+## Evidence
+
+Create a concise test report.
+
+Suggested location:
+
+`docs/e2e-macos.md`
+
+Record for each tested architecture:
+
+- hardware/model category;
+- CPU architecture;
+- macOS version;
+- artifact version/name;
+- artifact SHA-256 if available;
+- Gatekeeper first-launch behavior;
+- runtime preflight;
+- source connection test result;
+- destination connection test result;
+- real migration result;
+- cancellation result if tested;
+- repeat migration result;
+- residue/log inspection;
+- known limitations.
+
+Do not record credentials.
+
+## Screenshots
+
+Screenshots are optional.
+
+If used:
+
+- redact addresses/credentials when sensitive;
+- do not capture passwords;
+- keep them out of Git if they are large or contain private test data unless explicitly useful.
+
+## Signing/notarization status
+
+State clearly in the E2E report:
+
+- artifact is unsigned;
+- artifact is not notarized;
+- Gatekeeper approval is therefore expected;
+- signing/notarization is optional future/client-funded release hardening.
+
+Do not mark TASK-010 blocked solely because notarization is absent.
+
+## Automated verification
 
 Run:
 
-    pnpm verify
+`pnpm verify`
 
-Then run the full native arm64 pipeline on the GitHub-hosted Apple Silicon
-runner.
+before producing the test artifact.
 
-Required native evidence:
+Existing CI/runtime tests must remain green.
 
-1. runner confirmed arm64;
-2. arm64 runtime rebuilt;
-3. embedded PAR native components inspected;
-4. Net::SSLeay loads successfully;
-5. IO::Socket::SSL loads successfully;
-6. no Homebrew runtime library references remain;
-7. restricted-environment runtime self-test passes;
-8. arm64 Electron package builds;
-9. packaged runtime smoke test passes from inside `.app`;
-10. application launches;
-11. migration UX tests pass;
-12. x86_64 deterministic regression tests remain green.
+TASK-010 itself requires manual/native E2E evidence in addition to automated verification.
 
-If runtime invocation/build behavior changes materially, rerun the strongest
-available x86_64 packaged smoke verification as well.
+## Regression handling
 
----
+If E2E finds a real release-blocking application defect:
 
-# Release blocker
+1. reproduce it;
+2. add a deterministic automated regression test where appropriate;
+3. fix it narrowly;
+4. run `pnpm verify`;
+5. rebuild the affected artifact;
+6. repeat the relevant E2E step.
 
-Do not publish or mark the arm64 release as production-ready until the
-Net::SSLeay/OpenSSL portability issue is fixed and native CI proves it.
+Do not merely document a reproducible correctness/security bug as a known limitation when it can reasonably be fixed.
 
-Do not mark this task complete merely because `pnpm verify` passes.
+## Scope restrictions
 
-A green unit-test suite is insufficient.
+Do not:
 
----
+- enroll in Apple Developer Program;
+- implement signing/notarization;
+- disable Gatekeeper globally;
+- require users to install Homebrew;
+- add migration history;
+- add provider-specific features;
+- implement OAuth;
+- redesign the UI;
+- add auto-update;
+- add Windows/Linux support;
+- use customer production mailboxes without authorization.
 
-# Documentation
+## Acceptance criteria
 
-Update as relevant:
+TASK-010 is complete when:
 
-- README.md
-- docs/runtime.md
-- docs/architecture.md
-- docs/security.md
-- docs/testing.md
-- docs/progress.md
-- docs/decisions.md if a meaningful new runtime/build decision is made
-- tasks/backlog.md
+- `pnpm verify` passes;
+- actual packaged artifact is used;
+- at least one clean/native environment completes the full user workflow;
+- every architecture claimed as clean-machine verified has real native evidence;
+- first-launch Gatekeeper behavior is documented honestly;
+- application launches after normal unsigned-app approval;
+- bundled runtime works without end-user Homebrew/system Perl setup;
+- real source/destination IMAP authentication succeeds with controlled test accounts;
+- at least one real mailbox migration succeeds;
+- destination mailbox is independently inspected;
+- repeat-migration flow works;
+- credentials do not appear in UI/output/logs;
+- uncontrolled `LOG_imapsync/` / `W/` residue is absent;
+- failures remain safe and recoverable;
+- signing/notarization limitation is documented;
+- `docs/e2e-macos.md` records the evidence and remaining limitations.
 
-Document honestly:
+If an architecture has not undergone a real clean/native E2E run, do not describe that architecture as clean-machine verified.
 
-- the real clean-machine failure;
-- why the previous verification missed it;
-- the fix;
-- how embedded PAR native components are now inspected;
-- how SSL loading is now exercised in CI;
-- native arm64 verification result.
+## Task lifecycle
 
----
+On completion:
 
-# Completion report
+1. mark `tasks/current.md` as `Complete`;
+2. archive the task as `tasks/done/TASK-010.md`;
+3. append the result to `docs/progress.md`;
+4. update backlog with concrete remaining release/UX work;
+5. leave signing/notarization as optional/client-funded unless requirements change.
 
-Report explicitly:
+## Status
 
-- root cause;
-- why textradeuk migration succeeded while alfasis migration failed;
-- exact runtime fix;
-- OpenSSL resolution strategy;
-- Net::SSLeay dependency inspection result;
-- arm64 native CI run/result;
-- packaged smoke result;
-- UI changes made;
-- `pnpm verify` test count/result;
-- x86_64 regression status;
-- generated artifacts;
-- signing status;
-- notarization status;
-- commit hash;
-- push result.
+Blocked — requires manual clean-machine testing with real test mailboxes.
 
-Do not hide failed checks or remaining limitations.
+Done (automated/package verification):
+
+- `pnpm verify` passes (192 tests).
+- A first real-mac test distribution (`v0.1.0-e2e.1`, ZIPs) failed on a Ventura
+  machine and succeeded on the developer's x86_64 Hackintosh; the failure was
+  investigated in TASK-010B (see `docs/e2e-macos.md` and ADR-015).
+- A corrected distribution (`v0.1.0-e2e.2`) now ships ad-hoc-signed,
+  architecture-specific **DMGs** with `SHA256SUMS.txt`:
+  - x86_64 `imapSyncGUI-0.1.0-mac-x64.dmg`
+    (`c8a1cc4d978a6c36324326c95faa103a3f7a76d3e046cbc685d35c4ebddd2ff9`);
+  - arm64 `imapSyncGUI-0.1.0-mac-arm64.dmg`
+    (`d956b55a13184f83e39cb20a3417abf80e29ead3203991baec1e23f2aa219f9f`).
+- Both DMGs pass `hdiutil verify`/`hdiutil attach` and packaged smoke tests;
+  the arm64 DMG is verified by native arm64 CI; both public DMGs were
+  re-downloaded from GitHub and independently checksum-verified.
+- `docs/e2e-macos.md` records the incident investigation, the two real test
+  attempts, the architecture-selection guidance, and a pre-test architecture
+  checklist that must be filled in before the next launch attempt.
+
+Remaining blocker (cannot be performed by the agent environment):
+
+- a clean macOS machine without developer tooling;
+- controlled test IMAP mailboxes (credentials);
+- an interactive manual session for the real connection-test/migration workflow.
+
+Per the task, this cannot be marked Complete without real clean/native E2E
+evidence, and no architecture is described as "clean-machine verified". The
+task remains blocked; `docs/e2e-macos.md` records the exact remaining steps.

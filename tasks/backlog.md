@@ -19,3 +19,6 @@
 - Remove the redundant source `imapsync` script staged alongside the packed
   binary during the arm64 runtime build (`runtime/darwin-arm64/imapsync` in
   addition to `bin/imapsync`)
+- Add a `.gitattributes` enforcing LF line endings for source files (a shebang
+  in a test-imported `.mjs` broke Vitest on a Windows CRLF checkout during
+  TASK-014)

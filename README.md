@@ -86,11 +86,14 @@ Authenticode certificate) — see ADR-016, ADR-017, and `docs/e2e-windows.md` fo
 the SmartScreen expectation.
 
 > Status: the x86_64 runtime is a self-contained official `imapsync` binary
-> (ADR-012), the arm64 runtime is self-built (ADR-013), and the Windows x64
-> runtime is the official `imapsync.exe` (ADR-016); all are bundled, validated,
-> self-tested, packaged, and smoke-tested (natively, per platform). Signing
-> (Developer ID / Authenticode) and notarization remain follow-ups. See
-> `docs/runtime.md` and `docs/third-party-licenses.md`.
+> (ADR-012), the arm64 runtime is self-built with its OpenSSL dylibs bundled and
+> rewritten to `@loader_path` (ADR-013, ADR-018), and the Windows x64 runtime is
+> the official `imapsync.exe` (ADR-016); all are bundled, validated, self-tested,
+> packaged, and smoke-tested (natively, per platform). Runtime validation also
+> inspects native components embedded inside the PAR archive and the self-test
+> loads the SSL stack with Homebrew/MacPorts access denied. Signing (Developer ID
+> / Authenticode) and notarization remain follow-ups. See `docs/runtime.md` and
+> `docs/third-party-licenses.md`.
 
 ### Native arm64 CI
 

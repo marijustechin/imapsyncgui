@@ -498,3 +498,53 @@ Verification:
 - native Windows/macOS CI packaging commands are unchanged.
 
 Note: no application runtime behaviour changed; no commit or push performed.
+
+## 2026-09-11 — TASK-014
+
+Status: Complete (native Apple Silicon verification passed)
+
+Implemented:
+
+- fixed the macOS arm64 runtime SSL portability defect: the self-built
+  `Net::SSLeay::SSLeay.bundle` referenced `/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib`,
+  so the packaged runtime failed on clean Apple Silicon Macs;
+- the arm64 build now copies the referenced OpenSSL dylibs next to the bundle
+  and into the PAR archive and rewrites every reference to `@loader_path`
+  (ADR-018), keeping a single self-contained binary;
+- `runtime:validate` extracts the PAR and inspects every embedded native
+  component (architecture + `otool -L`; rejects Homebrew/MacPorts/user/CI paths
+  and unresolved dependencies); the old broken artifact now fails validation;
+- `runtime:self-test` and the packaged smoke test run `imapsync --version` under
+  `sandbox-exec` with Homebrew/MacPorts read access denied, proving the bundled
+  SSL stack is used;
+- migration failures now carry a typed `MigrationFailureCode` and exit code; the
+  adapter classifies a narrow dyld/DynaLoader loader signature as
+  `runtime-dependency`; the failure view shows a concise primary message and
+  moves raw diagnostics into a collapsed `Technical details` section.
+
+Verification:
+
+- `pnpm verify`: PASS (26 test files, 260 tests);
+- native arm64 CI (run 34590251634): PASS — 31 embedded native components with
+  no developer paths, SSL loads with Homebrew/MacPorts denied, packaged smoke
+  from `.app` and DMG, DMG verification; arm64 DMG SHA-256
+  `388d6c3deafef6f705bfd9097567270f99bba989f2591a5da7c2a1fb060e7117`;
+- native Windows x64 CI (run 34590251753): PASS (no regression);
+- x86_64 macOS: local `runtime:validate`, `runtime:self-test`, and
+  `package:smoke` PASS with the strengthened checks; the official x86_64 runtime
+  is unchanged.
+
+Honest status:
+
+- The exact host/artifact history of the successful textradeuk migration could
+  not be reconstructed; `Net::SSLeay` is loaded unconditionally, so the
+  success/failure difference was environmental (whether the Homebrew OpenSSL
+  path resolved), not a TLS-vs-plaintext code path.
+- The arm64 build still uses build-time Homebrew as a toolchain; the produced
+  runtime no longer depends on it.
+- A physical clean-machine macOS E2E migration with real mailboxes is still
+  outstanding (TASK-010).
+
+Decisions:
+
+- ADR-018: bundle OpenSSL into the arm64 PAR runtime via `@loader_path`.
