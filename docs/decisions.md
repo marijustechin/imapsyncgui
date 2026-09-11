@@ -548,7 +548,7 @@ dependency at run time.
 - `runtime:validate` now extracts the PAR archive and inspects every embedded
   `.bundle`/`.dylib` for architecture and developer-machine paths (Homebrew,
   MacPorts, `/Users`, CI runner paths); it fails on the old artifact.
-- `runtime:self-test` and the packaged smoke test run `imapsync --version` with
-  `DYLD_PRINT_LIBRARIES` in host isolation and fail if the SSL stack loads from
-  a developer path.
+- `runtime:self-test` and the packaged smoke test run `imapsync --version` under
+  `sandbox-exec` with Homebrew/MacPorts read access denied, so a runtime that
+  still depends on a developer OpenSSL fails the test.
 - The x86_64 official binary (system OpenSSL) is unchanged.

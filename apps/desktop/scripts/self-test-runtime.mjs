@@ -25,43 +25,39 @@ function fail(message) {
 
 // imapsync `use`s IO::Socket::SSL, which `use`s Net::SSLeay, at compile time,
 // so even `--version` loads the SSL XS bundle and the OpenSSL dylibs. Running
-// with DYLD_PRINT_LIBRARIES proves the SSL stack actually resolves, and that it
-// does not come from a developer-machine path (Homebrew/MacPorts/home). This is
-// the offline check that the previous self-test lacked (TASK-014).
-function assertSslStackResolves(binary, env, { requireBundle }) {
-  const result = spawnSync(binary, ['--noreleasecheck', '--version'], {
+// that under a sandbox that denies read access to Homebrew/MacPorts proves the
+// runtime resolves its SSL stack from the bundled `@loader_path` dylibs and
+// does not fall back to a developer-machine install. This is the offline check
+// the previous self-test lacked (TASK-014); the static PAR inspection in
+// `runtime:validate` provides the same guarantee without executing the binary.
+function assertSslStackResolvesWithoutDeveloperPaths(binary, env) {
+  const sandboxExec = '/usr/bin/sandbox-exec'
+  if (!existsSync(sandboxExec)) {
+    console.log('sandbox-exec unavailable; Homebrew independence is covered by runtime:validate')
+    return
+  }
+
+  const profile =
+    '(version 1)(allow default)' +
+    '(deny file-read* (subpath "/opt/homebrew"))' +
+    '(deny file-read* (subpath "/usr/local"))' +
+    '(deny file-read* (subpath "/opt/local"))'
+
+  const result = spawnSync(sandboxExec, ['-p', profile, binary, '--noreleasecheck', '--version'], {
     encoding: 'utf8',
-    env: { ...env, DYLD_PRINT_LIBRARIES: '1' },
+    env,
     timeout: 60_000,
   })
-
   if (result.error) {
-    fail(`running the bundled imapsync failed: ${result.error.message}`)
+    fail(`sandboxed SSL check failed to run: ${result.error.message}`)
   }
-
-  const trace = `${result.stdout ?? ''}\n${result.stderr ?? ''}`
   if (result.status !== 0) {
-    fail(`imapsync --version failed with status ${result.status}:\n${trace.trim()}`)
+    fail(
+      'the bundled runtime could not load its SSL stack with Homebrew/MacPorts access denied ' +
+        `(a developer OpenSSL dependency is still present):\n${(result.stderr ?? '').trim()}`,
+    )
   }
-
-  const sslLines = trace
-    .split('\n')
-    .filter((line) => /libssl|libcrypto|SSLeay\.bundle/.test(line))
-  if (sslLines.length === 0) {
-    fail('the runtime did not load the SSL stack (Net::SSLeay / libssl / libcrypto)')
-  }
-  if (requireBundle && !sslLines.some((line) => line.includes('SSLeay.bundle'))) {
-    fail('Net::SSLeay::SSLeay.bundle was not loaded from the bundled runtime')
-  }
-
-  const developerLines = sslLines.filter((line) =>
-    /\/opt\/homebrew|\/usr\/local\/Cellar|\/usr\/local\/opt|\/opt\/local|\/Users\//.test(line),
-  )
-  if (developerLines.length > 0) {
-    fail(`the runtime resolved an SSL component from a developer path:\n${developerLines.join('\n')}`)
-  }
-
-  console.log(`SSL stack loaded and resolved without developer paths (${sslLines.length} image(s))`)
+  console.log('bundled runtime loads its SSL stack with Homebrew/MacPorts access denied')
 }
 
 function main() {
@@ -99,7 +95,7 @@ function main() {
 
   if (runtimeArch !== 'win32-x64') {
     console.log('checking bundled SSL stack resolution')
-    assertSslStackResolves(binary, env, { requireBundle: runtimeArch === 'darwin-arm64' })
+    assertSslStackResolvesWithoutDeveloperPaths(binary, env)
   }
 
   console.log('runtime self-test OK (host-isolation environment applied)')

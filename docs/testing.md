@@ -25,8 +25,9 @@ Native runtime verification is separate and **not** part of `pnpm verify`
   verifies that `@loader_path` references resolve inside the archive.
 - `pnpm runtime:self-test` — offline self-test of the bundled binary in a
   host-isolation environment (restricted `PATH`, cleared Perl variables). On
-  macOS it additionally loads the SSL stack with `DYLD_PRINT_LIBRARIES=1` and
-  fails if `Net::SSLeay`/`libssl`/`libcrypto` resolves from a developer path.
+  macOS it additionally runs `imapsync --version` under `sandbox-exec` with
+  Homebrew/MacPorts read access denied, proving the SSL stack resolves from the
+  bundled `@loader_path` dylibs.
 - `pnpm package:mac:x64` / `pnpm package:mac:arm64` — build the distributable
   `.app` + `.dmg` + `.zip` for one architecture (ad-hoc signed, ADR-015).
 - `pnpm package:win:x64` — build the Windows x64 NSIS installer (unsigned,

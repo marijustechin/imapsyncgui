@@ -114,9 +114,9 @@ Repository commands (in `apps/desktop`):
   validation (ADR-018).
 - `pnpm runtime:self-test` — runs the staged binary offline in a host-isolation
   environment (restricted `PATH`, developer Perl variables cleared). On macOS it
-  additionally runs `imapsync --version` with `DYLD_PRINT_LIBRARIES=1` and
-  asserts that the SSL stack (`Net::SSLeay`/`libssl`/`libcrypto`) loads and
-  resolves without any developer-machine path.
+  additionally runs `imapsync --version` under `sandbox-exec` with read access
+  to Homebrew/MacPorts paths denied, proving the SSL stack resolves from the
+  bundled `@loader_path` dylibs rather than a developer-machine install.
 
 These accept `--runtime-arch <darwin-x64|darwin-arm64|win32-x64>` (or
 `--platform`/`--arch`). They are native/runtime verification commands and are
