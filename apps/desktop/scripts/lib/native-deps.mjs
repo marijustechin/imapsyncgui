@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // Pure helpers for classifying Mach-O dependency paths found in the bundled
 // runtime, including native components extracted from the PAR archive.
 //
@@ -36,11 +35,11 @@ export function isDeveloperDependency(dependency) {
 /**
  * Classifies a single Mach-O dependency path.
  *
- * - `system`   — ships with macOS (`/usr/lib`, `/System`, `/Library/Apple`)
- * - `bundled`  — resolved relative to the loaded component (`@loader_path` /
- *                `@executable_path`)
- * - `developer`— build-machine-only path (Homebrew/MacPorts/home/CI)
- * - `unknown`  — anything else (e.g. an unresolved absolute path or `@rpath`)
+ * - `system`    - ships with macOS (`/usr/lib`, `/System`, `/Library/Apple`)
+ * - `bundled`   - resolved relative to the loaded component (`@loader_path` /
+ *                 `@executable_path`)
+ * - `developer` - build-machine-only path (Homebrew/MacPorts/home/CI)
+ * - `unknown`   - anything else (e.g. an unresolved absolute path or `@rpath`)
  */
 export function classifyNativeDependency(dependency) {
   if (isSystemDependency(dependency)) return 'system'
