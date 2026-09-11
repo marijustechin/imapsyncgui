@@ -14,6 +14,7 @@ function run(command, args, env) {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
     env,
+    timeout: 60_000,
   })
 }
 
@@ -31,7 +32,12 @@ function assertSslStackResolves(binary, env, { requireBundle }) {
   const result = spawnSync(binary, ['--noreleasecheck', '--version'], {
     encoding: 'utf8',
     env: { ...env, DYLD_PRINT_LIBRARIES: '1' },
+    timeout: 60_000,
   })
+
+  if (result.error) {
+    fail(`running the bundled imapsync failed: ${result.error.message}`)
+  }
 
   const trace = `${result.stdout ?? ''}\n${result.stderr ?? ''}`
   if (result.status !== 0) {
@@ -87,10 +93,12 @@ function main() {
     console.log(`architecture: ${fileOutput}`)
   }
 
+  console.log('running bundled imapsync --version')
   const version = run(binary, ['--noreleasecheck', '--version'], env).trim()
   console.log(`imapsync starts: ${version}`)
 
   if (runtimeArch !== 'win32-x64') {
+    console.log('checking bundled SSL stack resolution')
     assertSslStackResolves(binary, env, { requireBundle: runtimeArch === 'darwin-arm64' })
   }
 

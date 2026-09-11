@@ -28,7 +28,11 @@ function assertSslStackResolves(binary, env, { requireBundle }) {
   const result = spawnSync(binary, ['--noreleasecheck', '--version'], {
     encoding: 'utf8',
     env: { ...env, DYLD_PRINT_LIBRARIES: '1' },
+    timeout: 60_000,
   })
+  if (result.error) {
+    fail(`running the packaged imapsync failed: ${result.error.message}`)
+  }
   const trace = `${result.stdout ?? ''}\n${result.stderr ?? ''}`
   if (result.status !== 0) {
     fail(`imapsync --version failed with status ${result.status}:\n${trace.trim()}`)
