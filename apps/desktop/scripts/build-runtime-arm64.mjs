@@ -99,11 +99,17 @@ function otoolDependencies(file) {
     .map((line) => line.split(' (')[0])
 }
 
-// Copies every non-system dependency of `bundlePath` (recursively) into
-// `stagingDir` and rewrites all references to `@loader_path/<basename>` so the
-// extracted PAR archive resolves them next to the bundle. Returns the mapping
-// of original path -> bundled basename.
+// Copies every non-system dependency of `bundlePath` (recursively) next to the
+// bundle and rewrites all references to `@loader_path/<basename>` so the
+// extracted PAR archive resolves them next to the bundle. The dylibs are also
+// copied into `stagingDir` (which mirrors `lib/auto/Net/SSLeay/`) so `pp -a lib`
+// packs them. Returns the mapping of original path -> bundled basename.
+//
+// The copies next to the build-time bundle matter because `pp`'s dependency
+// scanner executes the target script: the build perl must be able to load the
+// rewritten bundle while scanning.
 function bundleDependencies(bundlePath, stagingDir) {
+  const buildDir = dirname(bundlePath)
   mkdirSync(stagingDir, { recursive: true })
 
   const mapping = new Map()
@@ -116,8 +122,9 @@ function bundleDependencies(bundlePath, stagingDir) {
     }
     const resolved = realpathSync(dependency)
     const bundledName = basename(dependency)
-    copyFileSync(resolved, join(stagingDir, bundledName))
-    chmodSync(join(stagingDir, bundledName), 0o755)
+    const buildTarget = join(buildDir, bundledName)
+    copyFileSync(resolved, buildTarget)
+    chmodSync(buildTarget, 0o755)
     mapping.set(dependency, bundledName)
     mapping.set(resolved, bundledName)
 
@@ -145,7 +152,7 @@ function bundleDependencies(bundlePath, stagingDir) {
 
   // Rewrite the copied dylibs' ids and their own inter-dependencies.
   for (const bundledName of bundledNames) {
-    const file = join(stagingDir, bundledName)
+    const file = join(buildDir, bundledName)
     sh('install_name_tool', ['-id', `@loader_path/${bundledName}`, file])
     for (const dependency of otoolDependencies(file)) {
       const target = mapping.get(dependency)
@@ -157,8 +164,15 @@ function bundleDependencies(bundlePath, stagingDir) {
 
   // install_name_tool invalidates the code signature; on arm64 an unsigned or
   // invalidly-signed Mach-O cannot be loaded, so re-sign everything ad-hoc.
-  for (const file of [bundlePath, ...bundledNames.map((name) => join(stagingDir, name))]) {
+  for (const file of [bundlePath, ...bundledNames.map((name) => join(buildDir, name))]) {
     sh('codesign', ['--force', '--sign', '-', file])
+  }
+
+  // Mirror the rewritten dylibs into the PAR staging directory for packing.
+  for (const bundledName of bundledNames) {
+    const staged = join(stagingDir, bundledName)
+    copyFileSync(join(buildDir, bundledName), staged)
+    chmodSync(staged, 0o755)
   }
 
   return mapping
