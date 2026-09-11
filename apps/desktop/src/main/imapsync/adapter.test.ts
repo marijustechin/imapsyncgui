@@ -102,7 +102,42 @@ describe('MigrationAdapter', () => {
     h.fake.emitExit(1, null)
 
     expect(h.adapter.getPhase()).toBe('failed')
-    expect(h.results).toEqual([{ phase: 'failed', message: 'Migration exited with code 1.' }])
+    expect(h.results).toEqual([
+      {
+        phase: 'failed',
+        code: 'process-failed',
+        message: 'The migration did not complete successfully.',
+        exitCode: 1,
+      },
+    ])
+  })
+
+  it('classifies a bundled runtime dependency loader failure on a non-zero exit', async () => {
+    const h = createHarness()
+
+    const startPromise = h.adapter.start(input)
+    h.fake.emitSpawn()
+    await startPromise
+
+    h.fake.emitStderr(
+      Buffer.from(
+        "Can't load '/tmp/par-123/Net/SSLeay/SSLeay.bundle' for module Net::SSLeay: " +
+          'dlopen(/tmp/par-123/Net/SSLeay/SSLeay.bundle): Library not loaded: ' +
+          '/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib\n',
+      ),
+    )
+    h.fake.emitExit(2, null)
+
+    expect(h.adapter.getPhase()).toBe('failed')
+    expect(h.results).toEqual([
+      {
+        phase: 'failed',
+        code: 'runtime-dependency',
+        message:
+          'Migration could not start correctly because the bundled migration runtime failed to load a required component.',
+        exitCode: 2,
+      },
+    ])
   })
 
   it('resolves a startup failure when the process fails to launch', async () => {

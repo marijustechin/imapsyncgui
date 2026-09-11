@@ -502,3 +502,53 @@ no Authenticode certificate is available, and none is assumed.
   the renderer sandbox, narrow preload/IPC surface, shell-free `spawn`,
   credential-via-environment model, and deterministic runtime resolution all
   remain unchanged on Windows.
+
+## ADR-018 — Bundle OpenSSL into the arm64 PAR runtime via @loader_path
+
+- **Status:** accepted
+- **Date:** 2026-09-11
+
+The macOS arm64 runtime is self-built with Homebrew Perl and Homebrew OpenSSL 3
+(ADR-013). cpanm builds `Net::SSLeay`'s XS bundle (`SSLeay.bundle`) against the
+Homebrew OpenSSL prefix, so the bundle references
+`/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib` and `libcrypto.3.dylib` by
+absolute path. PAR::Packer embedded the bundle but not the Homebrew dylibs, so
+on a clean Apple Silicon Mac the extracted bundle failed to load
+(`Library not loaded: /opt/homebrew/...`). The top-level PAR executable links
+only `libSystem`, so the previous `otool -L imapsync` validation passed and the
+defect shipped (TASK-014).
+
+### Decision
+
+During the arm64 build, copy every non-system dependency of
+`Net::SSLeay::SSLeay.bundle` (recursively) into the PAR staging directory next
+to the bundle, rewrite every reference to `@loader_path/<dylib>`, re-sign each
+modified Mach-O ad-hoc, and pack them into the archive with `pp -a lib`. The
+runtime remains a single self-contained PAR binary whose SSL stack resolves
+relative to the extracted bundle, with no Homebrew/system Perl/OpenSSL
+dependency at run time.
+
+### Alternatives considered
+
+- **Link against macOS system `libssl`/`libcrypto`** (as the official x86_64
+  binary does): Apple ships no OpenSSL headers and the system ABI differs from
+  Homebrew OpenSSL 3, so `Net::SSLeay` cannot be built against it. Rejected.
+- **Ship the dylibs in a `lib/` directory next to `bin/` and reference
+  `@executable_path`**: works, but makes the runtime a multi-file artifact and
+  requires packaging/validation changes. The in-PAR `@loader_path` approach
+  keeps a single self-contained binary.
+- **Statically link OpenSSL into `Net::SSLeay`**: possible but fragile with
+  ExtUtils::MakeMaker and adds significant build complexity.
+- **Depend on the CI runner's Homebrew OpenSSL at run time**: rejected — it is
+  an end-user dependency and defeats the self-contained runtime guarantee.
+
+### Consequences
+
+- `runtime/darwin-arm64` stays a single PAR binary; no extra files are shipped.
+- `runtime:validate` now extracts the PAR archive and inspects every embedded
+  `.bundle`/`.dylib` for architecture and developer-machine paths (Homebrew,
+  MacPorts, `/Users`, CI runner paths); it fails on the old artifact.
+- `runtime:self-test` and the packaged smoke test run `imapsync --version` with
+  `DYLD_PRINT_LIBRARIES` in host isolation and fail if the SSL stack loads from
+  a developer path.
+- The x86_64 official binary (system OpenSSL) is unchanged.

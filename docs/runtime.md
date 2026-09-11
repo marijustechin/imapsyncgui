@@ -12,11 +12,13 @@ For x86_64 macOS the self-contained runtime is the official upstream
 `imapsync_bin_Darwin_x86_64` binary (ADR-012). For Windows x64 the
 self-contained runtime is the official upstream `imapsync.exe` from the free
 `imapsync_2.314.zip` archive (ADR-016). For macOS arm64 there is no official
-binary, so a self-contained binary is built via PAR::Packer (ADR-013). Each is
-a PAR::Packer-packaged executable that embeds Perl, the required CPAN modules,
-and the SSL/OpenSSL stack. The packaged application invokes the matching binary
-directly (no separate Perl), so it does not depend on the host's `PATH`,
-Homebrew, MacPorts, Strawberry Perl, or system Perl.
+binary, so a self-contained binary is built via PAR::Packer (ADR-013); because
+that build uses Homebrew OpenSSL, the referenced OpenSSL dylibs are bundled into
+the PAR archive and rewritten to `@loader_path` so no Homebrew remains at run
+time (ADR-018). Each is a PAR::Packer-packaged executable that embeds Perl, the
+required CPAN modules, and the SSL/OpenSSL stack. The packaged application
+invokes the matching binary directly (no separate Perl), so it does not depend
+on the host's `PATH`, Homebrew, MacPorts, Strawberry Perl, or system Perl.
 
 ## Runtime layout
 
@@ -104,9 +106,17 @@ Repository commands (in `apps/desktop`):
   official `imapsync.exe` with the manifest and license texts (ADR-016).
 - `pnpm runtime:validate` — checks platform/architecture, manifest (including
   artifact filename and SHA-256), the binary's `file` output + `otool -L`
-  (macOS), and the PE machine field (Windows).
+  (macOS), and the PE machine field (Windows). On macOS it also extracts the PAR
+  archive and inspects every embedded native component (`.bundle`/`.dylib`):
+  architecture must match, and every `otool -L` dependency must be a macOS
+  system library or an `@loader_path`/`@executable_path` reference that resolves
+  to a file inside the archive. Any Homebrew/MacPorts/user/CI path fails the
+  validation (ADR-018).
 - `pnpm runtime:self-test` — runs the staged binary offline in a host-isolation
-  environment (restricted `PATH`, developer Perl variables cleared).
+  environment (restricted `PATH`, developer Perl variables cleared). On macOS it
+  additionally runs `imapsync --version` with `DYLD_PRINT_LIBRARIES=1` and
+  asserts that the SSL stack (`Net::SSLeay`/`libssl`/`libcrypto`) loads and
+  resolves without any developer-machine path.
 
 These accept `--runtime-arch <darwin-x64|darwin-arm64|win32-x64>` (or
 `--platform`/`--arch`). They are native/runtime verification commands and are
@@ -133,10 +143,15 @@ in a host-isolation environment.
   self-tested, packaged, and smoke-tested successfully.
 - **`darwin-arm64`:** built and verified natively via the GitHub Actions
   `macos-15` arm64 runner (ADR-014). The self-built PAR::Packer binary is arm64,
-  links only system `libSystem`, passes host-isolation self-test, and the
-  packaged smoke test passes from inside the arm64 `.app`. No official arm64
-  standalone binary exists, so the runtime is self-built from the upstream
-  `imapsync` script (ADR-013).
+  links only system `libSystem` at the top level, and passes host-isolation
+  self-test and packaged smoke test from inside the arm64 `.app`. No official
+  arm64 standalone binary exists, so the runtime is self-built from the upstream
+  `imapsync` script (ADR-013). Since TASK-014 the OpenSSL dylibs that
+  `Net::SSLeay::SSLeay.bundle` needs are bundled inside the PAR archive and
+  referenced via `@loader_path` (ADR-018), so the runtime no longer depends on
+  the build machine's Homebrew OpenSSL. Earlier arm64 builds embedded a bundle
+  referencing `/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib` and failed on a
+  clean Mac.
 - **`win32-x64`:** official self-contained `imapsync.exe` from the upstream
   Windows zip (ADR-016), staged, validated (PE AMD64), self-tested, packaged,
   and smoke-tested natively on a Windows x64 runner (TASK-011). The installer is
@@ -153,8 +168,10 @@ in a host-isolation environment.
 - **`darwin-arm64`:** self-built PAR::Packer binary from the upstream `imapsync`
   script (`https://imapsync.lamiral.info/imapsync`). The exact `imapsync`
   version (currently 2.324) and script SHA-256 are recorded dynamically in the
-  manifest. Build-time Perl is the current Homebrew `perl` (5.42); OpenSSL 3 and
-  the CPAN module set are embedded.
+  manifest. Build-time Perl is the current Homebrew `perl` (5.42); the OpenSSL 3
+  dylibs referenced by `Net::SSLeay::SSLeay.bundle` are copied into the PAR
+  archive and rewritten to `@loader_path` (ADR-018), and the CPAN module set is
+  embedded.
 - **`win32-x64`:** `imapsync` 2.314 self-contained `imapsync.exe` — upstream
   `https://imapsync.lamiral.info/dist/imapsync_2.314.zip` (zip SHA-256
   `61972bf94532bf186dd6d6ee54a4c70bb7ab3bdb79f324321cd742fd50953a0c`, exe

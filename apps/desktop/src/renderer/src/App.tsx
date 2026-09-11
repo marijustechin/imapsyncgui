@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { MigrationFailureCode } from '../../shared/contracts'
 import { EndpointForm, type TestState } from './EndpointForm'
 import { MigrationView, type MigrationViewPhase } from './MigrationView'
 import {
@@ -21,7 +22,7 @@ type MigrationState =
   | { phase: 'running' }
   | { phase: 'cancelling' }
   | { phase: 'succeeded' }
-  | { phase: 'failed'; message: string }
+  | { phase: 'failed'; code: MigrationFailureCode; message: string; exitCode: number | null }
   | { phase: 'cancelled' }
 
 interface SideState {
@@ -90,7 +91,7 @@ function App() {
         if (event.phase === 'cancelled') {
           return { phase: 'cancelled' }
         }
-        return { phase: 'failed', message: event.message }
+        return { phase: 'failed', code: event.code, message: event.message, exitCode: event.exitCode }
       })
       cleanupSubscription()
     })
@@ -214,6 +215,7 @@ function App() {
         destination={identities.destination}
         output={output}
         failureMessage={migration.phase === 'failed' ? migration.message : null}
+        failureExitCode={migration.phase === 'failed' ? migration.exitCode : null}
         cancelError={cancelError}
         onCancel={handleCancel}
         onStartAnother={handleStartAnother}

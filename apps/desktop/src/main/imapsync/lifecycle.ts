@@ -3,7 +3,12 @@ import type { MigrationResult } from './types'
 
 export function toLifecycleEvent(result: MigrationResult): MigrationLifecycleEvent {
   if (result.phase === 'failed') {
-    return { phase: 'failed', message: result.message }
+    return {
+      phase: 'failed',
+      code: result.code ?? 'internal',
+      message: result.message,
+      exitCode: result.exitCode ?? null,
+    }
   }
   if (result.phase === 'cancelled') {
     return { phase: 'cancelled' }

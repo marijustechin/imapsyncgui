@@ -19,9 +19,14 @@ Native runtime verification is separate and **not** part of `pnpm verify`
 - `pnpm runtime:build:win` — stage the pinned self-contained Windows x64
   `imapsync.exe` + manifest.
 - `pnpm runtime:validate` — validate a staged runtime (platform/arch, manifest,
-  `file` + `otool -L` on macOS, PE machine field on Windows).
+  `file` + `otool -L` on macOS, PE machine field on Windows). On macOS it also
+  extracts the PAR archive and inspects every embedded native component for
+  architecture and developer-machine paths (Homebrew/MacPorts/user/CI), and
+  verifies that `@loader_path` references resolve inside the archive.
 - `pnpm runtime:self-test` — offline self-test of the bundled binary in a
-  host-isolation environment (restricted `PATH`, cleared Perl variables).
+  host-isolation environment (restricted `PATH`, cleared Perl variables). On
+  macOS it additionally loads the SSL stack with `DYLD_PRINT_LIBRARIES=1` and
+  fails if `Net::SSLeay`/`libssl`/`libcrypto` resolves from a developer path.
 - `pnpm package:mac:x64` / `pnpm package:mac:arm64` — build the distributable
   `.app` + `.dmg` + `.zip` for one architecture (ad-hoc signed, ADR-015).
 - `pnpm package:win:x64` — build the Windows x64 NSIS installer (unsigned,
@@ -40,9 +45,10 @@ See `docs/runtime.md`.
 `.github/workflows/macos-arm64.yml` (manual `workflow_dispatch` and on push to
 `main`) runs the full native arm64 sequence on a GitHub-hosted `macos-15`
 (arm64) runner: verify the host is arm64, `pnpm verify`, `runtime:build:arm64`,
-`runtime:validate`, `runtime:self-test`, `package:mac:arm64`, architecture
-inspection, packaged smoke test, and a best-effort application launch. See
-ADR-014.
+`runtime:validate` (including embedded PAR native-component inspection),
+`runtime:self-test` (including the offline SSL-stack load check),
+`package:mac:arm64`, architecture inspection, packaged smoke test, and a
+best-effort application launch. See ADR-014 and ADR-018.
 
 ### Native Windows x64 CI
 
@@ -106,7 +112,9 @@ ADR-017.
 - `src/main/imapsync/adapter.test.ts` covers the process lifecycle (success,
   non-zero exit, startup failure), incremental stdout/stderr streaming,
   reassembly of multi-byte UTF-8 characters split across chunks, cancellation,
-  repeated cancellation, rejection of concurrent migrations, and
+  repeated cancellation, rejection of concurrent migrations, classification of a
+  bundled-runtime dependency loader failure (`runtime-dependency`) versus a
+  generic `process-failed` exit, and
   that credentials travel via environment rather than arguments and are
   redacted from output.
 - `src/main/imapsync/streaming.test.ts` spawns a real child process (a small
@@ -114,7 +122,13 @@ ADR-017.
   chunk of output is delivered while the process is still running, proving the
   spawn/pipe path is incremental rather than buffered until exit.
 - `src/main/imapsync/lifecycle.test.ts` covers the runtime-result → lifecycle
-  event mapping and that no `Error` object crosses the boundary.
+  event mapping (including the failure code and exit code) and that no `Error`
+  object crosses the boundary.
+- `src/main/runtime/nativeDeps.test.ts` covers the packaging/runtime native
+  dependency classifier used by `runtime:validate`: macOS system libraries and
+  `@loader_path` references are accepted, while Homebrew (`/opt/homebrew`,
+  `/usr/local/Cellar`), MacPorts, `/Users`, and CI runner paths are rejected.
+  This is the regression test for the arm64 OpenSSL portability defect.
 - `src/main/runtime/arch.test.ts`, `errors.test.ts`, `manifest.test.ts`,
   `resolve.test.ts`, `validate.test.ts`, and `env.test.ts` cover the platform →
   architecture mapping (`darwin-x64` / `darwin-arm64` / `win32-x64`), the
@@ -165,8 +179,10 @@ ADR-017.
 - `src/renderer/src/MigrationView.test.tsx` covers the migration view directly:
   the live running indicator and `Waiting for imapsync output…` placeholder,
   the starting/running/cancelling states, the preserved log once output
-  arrives, distinct success/failure/cancelled results, the failure and cancel
-  error alerts, and the start-another action.
+  arrives, distinct success/failure/cancelled results, the concise primary
+  failure message with raw diagnostics (and exit code) confined to a collapsed
+  `Technical details` section while active runs show the log inline, the failure
+  and cancel error alerts, and the start-another action.
 
 Runtime, connection, and renderer tests use injected fakes or a mocked preload
 API and never require a real `imapsync` install or live IMAP servers.

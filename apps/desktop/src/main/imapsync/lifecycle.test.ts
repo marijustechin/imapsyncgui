@@ -14,16 +14,34 @@ describe('toLifecycleEvent', () => {
     })
   })
 
-  it('maps a failed result to a failed event with its message', () => {
-    expect(toLifecycleEvent({ phase: 'failed', message: 'Migration exited with code 1.' })).toEqual({
+  it('maps a failed result to a failed event with its category, message, and exit code', () => {
+    expect(
+      toLifecycleEvent({
+        phase: 'failed',
+        code: 'process-failed',
+        message: 'The migration did not complete successfully.',
+        exitCode: 1,
+      }),
+    ).toEqual({
       phase: 'failed',
-      message: 'Migration exited with code 1.',
+      code: 'process-failed',
+      message: 'The migration did not complete successfully.',
+      exitCode: 1,
+    })
+  })
+
+  it('defaults an unclassified failure to internal with no exit code', () => {
+    expect(toLifecycleEvent({ phase: 'failed', message: 'boom' })).toEqual({
+      phase: 'failed',
+      code: 'internal',
+      message: 'boom',
+      exitCode: null,
     })
   })
 
   it('never carries an Error object across the mapping', () => {
     const event = toLifecycleEvent({ phase: 'failed', message: 'boom' })
     expect(event).not.toBeInstanceOf(Error)
-    expect(Object.keys(event).sort()).toEqual(['message', 'phase'])
+    expect(Object.keys(event).sort()).toEqual(['code', 'exitCode', 'message', 'phase'])
   })
 })

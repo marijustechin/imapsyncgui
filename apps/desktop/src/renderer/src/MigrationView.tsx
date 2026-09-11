@@ -8,6 +8,7 @@ interface MigrationViewProps {
   destination: string
   output: string
   failureMessage: string | null
+  failureExitCode: number | null
   cancelError: string | null
   onCancel: () => void
   onStartAnother: () => void
@@ -28,6 +29,7 @@ export function MigrationView({
   destination,
   output,
   failureMessage,
+  failureExitCode,
   cancelError,
   onCancel,
   onStartAnother,
@@ -53,6 +55,18 @@ export function MigrationView({
     const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight
     stickToBottomRef.current = distanceFromBottom < 30
   }
+
+  const outputPanel = (
+    <pre
+      ref={outputRef}
+      className="output"
+      role="log"
+      aria-label="Migration output"
+      onScroll={handleScroll}
+    >
+      {output}
+    </pre>
+  )
 
   return (
     <section className="migration" aria-label="Migration">
@@ -81,13 +95,34 @@ export function MigrationView({
       </header>
 
       {terminal ? (
-        <button type="button" onClick={onStartAnother}>
-          Start another migration
-        </button>
+        <>
+          <button type="button" onClick={onStartAnother}>
+            Start another migration
+          </button>
+
+          <details className="technical-details">
+            <summary>Technical details</summary>
+            {phase === 'failed' && failureExitCode !== null ? (
+              <p className="technical-exit-code">imapsync exit code: {failureExitCode}</p>
+            ) : null}
+            {output.length > 0 ? (
+              <div className="output-container">{outputPanel}</div>
+            ) : (
+              <p className="technical-empty">No output was captured.</p>
+            )}
+          </details>
+        </>
       ) : (
-        <button type="button" onClick={onCancel} disabled={phase === 'cancelling'}>
-          {phase === 'cancelling' ? 'Cancelling…' : 'Cancel migration'}
-        </button>
+        <>
+          <button type="button" onClick={onCancel} disabled={phase === 'cancelling'}>
+            {phase === 'cancelling' ? 'Cancelling…' : 'Cancel migration'}
+          </button>
+
+          <div className="output-container">
+            {outputPanel}
+            {output.length === 0 ? <p className="output-placeholder">Waiting for imapsync output…</p> : null}
+          </div>
+        </>
       )}
 
       {cancelError ? (
@@ -95,21 +130,6 @@ export function MigrationView({
           {cancelError}
         </p>
       ) : null}
-
-      <div className="output-container">
-        <pre
-          ref={outputRef}
-          className="output"
-          role="log"
-          aria-label="Migration output"
-          onScroll={handleScroll}
-        >
-          {output}
-        </pre>
-        {output.length === 0 && active ? (
-          <p className="output-placeholder">Waiting for imapsync output…</p>
-        ) : null}
-      </div>
     </section>
   )
 }

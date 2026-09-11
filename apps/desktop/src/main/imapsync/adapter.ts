@@ -1,5 +1,10 @@
 import { StringDecoder } from 'node:string_decoder'
-import type { MigrationCancelResult, MigrationInput, MigrationStartResult } from '../../shared/contracts'
+import type {
+  MigrationCancelResult,
+  MigrationFailureCode,
+  MigrationInput,
+  MigrationStartResult,
+} from '../../shared/contracts'
 import { buildRuntimeEnvironment } from '../runtime/env'
 import { buildMigrationArgs } from './arguments'
 import { redactSecrets } from './sanitize'
@@ -11,6 +16,26 @@ import type {
   ProcessLauncher,
   ResultListener,
 } from './types'
+
+const FAILURE_MESSAGES: Record<MigrationFailureCode, string> = {
+  'runtime-unavailable': 'The bundled migration runtime is not available.',
+  'runtime-dependency':
+    'Migration could not start correctly because the bundled migration runtime failed to load a required component.',
+  'spawn-failed': 'The migration process could not be started.',
+  'process-failed': 'The migration did not complete successfully.',
+  internal: 'An unexpected error occurred during the migration.',
+}
+
+// Narrow, documented signatures of a dyld/DynaLoader failure (e.g. a
+// non-relocatable OpenSSL dependency in the bundled runtime). These are stable
+// loader diagnostics, not arbitrary imapsync log text, so they can reliably
+// classify a bundled-runtime dependency failure without inventing categories
+// from free-form output.
+const RUNTIME_DEPENDENCY_SIGNATURES = [/Can't load .* for module/i, /Library not loaded:/, /Symbol not found:/]
+
+function isRuntimeDependencyFailure(text: string): boolean {
+  return RUNTIME_DEPENDENCY_SIGNATURES.some((pattern) => pattern.test(text))
+}
 
 export interface MigrationAdapterOptions {
   launcher: ProcessLauncher
@@ -46,6 +71,8 @@ export class MigrationAdapter {
   private process: MigrationProcess | null = null
   private phase: MigrationPhase = 'idle'
   private cancelRequested = false
+  private runtimeDependencyFailure = false
+  private failureScanTail = ''
 
   constructor(options: MigrationAdapterOptions) {
     this.launcher = options.launcher
@@ -72,6 +99,8 @@ export class MigrationAdapter {
     const sanitize = (text: string): string => redactSecrets(text, secrets)
 
     this.cancelRequested = false
+    this.runtimeDependencyFailure = false
+    this.failureScanTail = ''
     this.setPhase('starting')
 
     const args = [...this.prefixArgs, ...this.buildArgs(input)]
@@ -110,7 +139,12 @@ export class MigrationAdapter {
           return
         }
         this.setPhase('failed')
-        this.onResult?.({ phase: 'failed', message: error.message })
+        this.onResult?.({
+          phase: 'failed',
+          code: 'internal',
+          message: FAILURE_MESSAGES.internal,
+          exitCode: null,
+        })
       })
 
       process.onSpawn(() => {
@@ -130,10 +164,10 @@ export class MigrationAdapter {
 
       process.onData((chunk) => this.handleData('stdout', stdoutDecoder.write(chunk), sanitize), 'stdout')
       process.onData((chunk) => this.handleData('stderr', stderrDecoder.write(chunk), sanitize), 'stderr')
-      process.onExit((code, signal) => {
+      process.onExit((code) => {
         this.handleData('stdout', stdoutDecoder.end(), sanitize)
         this.handleData('stderr', stderrDecoder.end(), sanitize)
-        this.handleExit(code, signal)
+        this.handleExit(code)
       })
     })
   }
@@ -159,11 +193,17 @@ export class MigrationAdapter {
   private handleData(stream: 'stdout' | 'stderr', text: string, sanitize: (text: string) => string): void {
     const sanitized = sanitize(text)
     if (sanitized.length > 0) {
+      // Keep a bounded rolling tail purely for failure classification; output
+      // itself is still forwarded chunk-by-chunk and never delayed.
+      this.failureScanTail = (this.failureScanTail + sanitized).slice(-4096)
+      if (!this.runtimeDependencyFailure && isRuntimeDependencyFailure(this.failureScanTail)) {
+        this.runtimeDependencyFailure = true
+      }
       this.onOutput?.({ stream, text: sanitized })
     }
   }
 
-  private handleExit(code: number | null, signal: string | null): void {
+  private handleExit(code: number | null): void {
     this.process = null
 
     if (this.cancelRequested) {
@@ -179,9 +219,14 @@ export class MigrationAdapter {
       return
     }
 
-    const reason = signal ? `terminated by signal ${signal}` : `exited with code ${code ?? 'unknown'}`
+    const failureCode: MigrationFailureCode = this.runtimeDependencyFailure ? 'runtime-dependency' : 'process-failed'
     this.setPhase('failed')
-    this.onResult?.({ phase: 'failed', message: `Migration ${reason}.` })
+    this.onResult?.({
+      phase: 'failed',
+      code: failureCode,
+      message: FAILURE_MESSAGES[failureCode],
+      exitCode: code,
+    })
   }
 
   private setPhase(phase: MigrationPhase): void {

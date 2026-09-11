@@ -46,9 +46,19 @@ export interface MigrationOutput {
 
 export type MigrationEndPhase = 'succeeded' | 'failed' | 'cancelled'
 
+// Stable, application-level failure categories. The runtime adapter only emits
+// a category when it can classify the failure reliably; free-form imapsync
+// output is never parsed to invent a category.
+export type MigrationFailureCode =
+  | 'runtime-unavailable'
+  | 'runtime-dependency'
+  | 'spawn-failed'
+  | 'process-failed'
+  | 'internal'
+
 export type MigrationLifecycleEvent =
   | { phase: 'succeeded' }
-  | { phase: 'failed'; message: string }
+  | { phase: 'failed'; code: MigrationFailureCode; message: string; exitCode: number | null }
   | { phase: 'cancelled' }
 
 export const IPC_CHANNELS = {

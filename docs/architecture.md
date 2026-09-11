@@ -330,22 +330,39 @@ migrations remain isolated.
 The `migration:lifecycle` event is a discriminated union:
 
 - `{ phase: 'succeeded' }`
-- `{ phase: 'failed'; message: string }`
+- `{ phase: 'failed'; code: MigrationFailureCode; message: string; exitCode: number | null }`
 - `{ phase: 'cancelled' }`
 
-The `failed` variant carries a concise, safe message from the runtime adapter
-(e.g. `Migration exited with code 1.`). The main process maps the adapter's
-typed result to this event (`src/main/imapsync/lifecycle.ts`); no raw `Error`
-object crosses IPC.
+`MigrationFailureCode` is a stable application-level category:
+`runtime-unavailable`, `runtime-dependency`, `spawn-failed`, `process-failed`,
+or `internal`. The runtime adapter emits a category only when it can classify
+the failure reliably:
+
+- `runtime-unavailable` — the bundled runtime is missing or fails validation;
+- `spawn-failed` — the process could not be launched;
+- `runtime-dependency` — the process started but a narrow, documented
+  dyld/DynaLoader loader signature was observed in its output
+  (`Can't load ... for module`, `Library not loaded:`, `Symbol not found:`),
+  i.e. the bundled runtime failed to load a required native component;
+- `process-failed` — any other non-zero exit;
+- `internal` — an unexpected post-spawn error.
+
+Free-form imapsync output is never parsed to invent categories (e.g.
+authentication or mailbox errors map to `process-failed` with diagnostics). The
+main process maps the adapter's typed result to this event
+(`src/main/imapsync/lifecycle.ts`); no raw `Error` object crosses IPC.
 
 ### Result UX
 
 Terminal outcomes are shown distinctly (success / failure / cancelled) with the
-source and destination identities, the preserved (still bounded) output, and a
-`Start another migration` action. Returning to the form clears the terminal
-state, output, and cancel state, invalidates the previous connection tests, and
-requires fresh successful connection tests before the next migration while
-keeping the endpoint field values in memory.
+source and destination identities and a `Start another migration` action. The
+primary failure message is the concise, user-facing `message`; raw output
+(including any Perl/dyld loader diagnostics and absolute paths) is moved to a
+collapsed, secondary `Technical details` section together with the process exit
+code. The output is never the dominant failure UI. Returning to the form clears
+the terminal state, output, and cancel state, invalidates the previous
+connection tests, and requires fresh successful connection tests before the next
+migration while keeping the endpoint field values in memory.
 
 ### Output buffer
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -20,6 +20,33 @@ function arg(name) {
 function fail(message) {
   console.error(`packaged runtime smoke test failed: ${message}`)
   process.exit(1)
+}
+
+// The packaged runtime must load the SSL stack offline and resolve it without
+// developer-machine paths. See TASK-014 / docs/runtime.md.
+function assertSslStackResolves(binary, env, { requireBundle }) {
+  const result = spawnSync(binary, ['--noreleasecheck', '--version'], {
+    encoding: 'utf8',
+    env: { ...env, DYLD_PRINT_LIBRARIES: '1' },
+  })
+  const trace = `${result.stdout ?? ''}\n${result.stderr ?? ''}`
+  if (result.status !== 0) {
+    fail(`imapsync --version failed with status ${result.status}:\n${trace.trim()}`)
+  }
+  const sslLines = trace.split('\n').filter((line) => /libssl|libcrypto|SSLeay\.bundle/.test(line))
+  if (sslLines.length === 0) {
+    fail('the packaged runtime did not load the SSL stack (Net::SSLeay / libssl / libcrypto)')
+  }
+  if (requireBundle && !sslLines.some((line) => line.includes('SSLeay.bundle'))) {
+    fail('the packaged runtime did not load Net::SSLeay::SSLeay.bundle from the bundle')
+  }
+  const developerLines = sslLines.filter((line) =>
+    /\/opt\/homebrew|\/usr\/local\/Cellar|\/usr\/local\/opt|\/opt\/local|\/Users\//.test(line),
+  )
+  if (developerLines.length > 0) {
+    fail(`the packaged runtime resolved an SSL component from a developer path:\n${developerLines.join('\n')}`)
+  }
+  console.log(`SSL stack loaded from packaged/system locations (${sslLines.length} image(s))`)
 }
 
 function findMacApp() {
@@ -118,6 +145,10 @@ function main() {
     env,
   }).trim()
   console.log(`imapsync starts: ${version}`)
+
+  if (runtimeArch !== 'win32-x64') {
+    assertSslStackResolves(binary, env, { requireBundle: runtimeArch === 'darwin-arm64' })
+  }
 
   console.log('packaged runtime smoke test OK')
 }

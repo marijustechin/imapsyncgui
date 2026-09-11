@@ -1,4 +1,4 @@
-import type { MigrationOutput } from '../../shared/contracts'
+import type { MigrationFailureCode, MigrationOutput } from '../../shared/contracts'
 
 export type MigrationPhase = 'idle' | 'starting' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
@@ -7,6 +7,8 @@ export type MigrationEndPhase = 'succeeded' | 'failed' | 'cancelled'
 export interface MigrationResult {
   phase: MigrationEndPhase
   message: string
+  code?: MigrationFailureCode
+  exitCode?: number | null
 }
 
 export type OutputListener = (output: MigrationOutput) => void

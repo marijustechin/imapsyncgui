@@ -135,10 +135,15 @@ completion from output text. The renderer's output buffer is bounded
 (100,000 characters) and output is never persisted, logged, or copied into
 debug output by application code.
 
-Failure results carry only a concise, safe message from the runtime adapter
-(e.g. a non-zero exit reason); no raw `Error`, stack trace, executable path, or
-environment variable crosses IPC. The result screen shows safe `username@host`
-identities and never renders passwords or complete credential-bearing objects.
+Failure results carry a stable `MigrationFailureCode` and a concise, safe
+message from the runtime adapter; no raw `Error`, stack trace, executable path,
+or environment variable crosses IPC. The failure classification is based on
+typed adapter state and a narrow, documented loader-failure signature — it never
+parses free-form imapsync output to guess a category. The primary result screen
+shows the concise message plus safe `username@host` identities; raw diagnostics
+(which may contain absolute filesystem paths or loader output) are confined to a
+collapsed `Technical details` section and never shown as the dominant failure
+UI. It never renders passwords or complete credential-bearing objects.
 
 ## Code signing and notarization
 

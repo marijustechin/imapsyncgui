@@ -114,7 +114,7 @@ async function beginMigration(): Promise<void> {
 }
 
 function outputText(): string {
-  return screen.getByRole('log').textContent ?? ''
+  return screen.getByRole('log', { hidden: true }).textContent ?? ''
 }
 
 describe('App migration form', () => {
@@ -452,14 +452,14 @@ describe('App migration result', () => {
     expect(screen.getByRole('button', { name: 'Start another migration' })).toBeDefined()
   })
 
-  it('renders the failure result with its message on a failed lifecycle event', async () => {
+  it('renders the failure result with its concise message on a failed lifecycle event', async () => {
     render(<App />)
     await beginMigration()
 
-    emitLifecycle({ phase: 'failed', message: 'Migration exited with code 1.' })
+    emitLifecycle({ phase: 'failed', code: 'process-failed', message: 'The migration did not complete successfully.', exitCode: 1 })
 
     await screen.findByText('Migration failed.')
-    expect(screen.getByText('Migration exited with code 1.')).toBeDefined()
+    expect(screen.getByText('The migration did not complete successfully.')).toBeDefined()
     expect(screen.getByRole('button', { name: 'Start another migration' })).toBeDefined()
   })
 
@@ -494,7 +494,7 @@ describe('App migration result', () => {
     render(<App />)
     await beginMigration()
 
-    emitLifecycle({ phase: 'failed', message: 'Migration exited with code 1.' })
+    emitLifecycle({ phase: 'failed', code: 'process-failed', message: 'The migration did not complete successfully.', exitCode: 1 })
     await screen.findByText('Migration failed.')
 
     expect(document.body.textContent).not.toContain('Error:')

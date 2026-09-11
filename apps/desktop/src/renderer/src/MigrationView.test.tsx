@@ -12,6 +12,7 @@ function renderView(overrides: Partial<ComponentProps<typeof MigrationView>> = {
     destination: 'user2@dst.example.com',
     output: '',
     failureMessage: null,
+    failureExitCode: null,
     cancelError: null,
     onCancel,
     onStartAnother,
@@ -19,6 +20,10 @@ function renderView(overrides: Partial<ComponentProps<typeof MigrationView>> = {
   }
   const view = render(<MigrationView {...props} />)
   return { ...view, onCancel, onStartAnother }
+}
+
+function logText(): string {
+  return screen.getByRole('log', { hidden: true }).textContent ?? ''
 }
 
 describe('MigrationView', () => {
@@ -60,17 +65,38 @@ describe('MigrationView', () => {
     const { container } = renderView({ phase: 'succeeded', output: 'done\n' })
 
     expect(screen.getByRole('status').textContent).toBe('Migration completed successfully.')
-    expect(screen.getByRole('log').textContent).toBe('done\n')
+    expect(logText()).toBe('done\n')
     expect(container.querySelector('.spinner')).toBeNull()
     expect(screen.getByRole('button', { name: 'Start another migration' })).toBeDefined()
   })
 
-  it('shows the failure state with its message and preserved output', () => {
-    renderView({ phase: 'failed', failureMessage: 'Migration exited with code 1.', output: 'partial\n' })
+  it('shows the concise failure message as primary and keeps diagnostics secondary', () => {
+    const { container } = renderView({
+      phase: 'failed',
+      failureMessage: 'Migration could not start correctly because the bundled migration runtime failed to load a required component.',
+      failureExitCode: 2,
+      output: 'Can\'t load .../SSLeay.bundle: Library not loaded: /opt/homebrew/opt/openssl@3/lib/libssl.3.dylib\n',
+    })
 
     expect(screen.getByRole('status').textContent).toBe('Migration failed.')
-    expect(screen.getByRole('alert').textContent).toBe('Migration exited with code 1.')
-    expect(screen.getByRole('log').textContent).toBe('partial\n')
+    expect(screen.getByRole('alert').textContent).toBe(
+      'Migration could not start correctly because the bundled migration runtime failed to load a required component.',
+    )
+
+    // Raw diagnostics live in a collapsed secondary section, not the primary UI.
+    const details = container.querySelector('details.technical-details') as HTMLDetailsElement | null
+    expect(details).not.toBeNull()
+    expect(details?.open).toBe(false)
+    expect(details?.querySelector('summary')?.textContent).toBe('Technical details')
+    expect(details?.querySelector('.technical-exit-code')?.textContent).toContain('2')
+    expect(logText()).toContain('Library not loaded')
+  })
+
+  it('does not render a technical details section while the migration is active', () => {
+    const { container } = renderView({ phase: 'running', output: 'working\n' })
+
+    expect(container.querySelector('details.technical-details')).toBeNull()
+    expect(screen.getByRole('log').textContent).toBe('working\n')
   })
 
   it('shows cancellation distinctly from failure', () => {
